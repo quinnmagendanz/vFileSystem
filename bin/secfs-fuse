@@ -9,6 +9,7 @@ import llfuse
 import logging
 from llfuse import FUSEError
 
+import secfs.serializers
 import secfs.access
 import secfs.store
 import secfs.fs

@@ -7,13 +7,13 @@
 import pickle
 import secfs.store
 import secfs.fs
-from secfs.types import I, Principal, User, Group
+from secfs.types import I, Principal, User, Group, VersionStruct, VersionStructList
 
-# current_itables represents the current view of the file system's itables
-current_itables = {}
+vsl = VersionStructList()  # Principal -> VersionStruct
 
 # a server connection handle is passed to us at mount time by secfs-fuse
 server = None
+active_user = None
 def register(_server):
     global server
     server = _server
@@ -23,10 +23,15 @@ def pre(refresh, user):
     Called before all user file system operations, right after we have obtained
     an exclusive server lock.
     """
-
+    global server
+    global vsl
+    vsl = VersionStructList(server.get_vsl())
+    print("DOWNDLOADED VSL", vsl, type(vsl))
     if refresh != None:
         # refresh usermap and groupmap
         refresh()
+    global active_user  # TODO(eforde): ewewewewewew
+    active_user = user
 
 def post(push_vs):
     if not push_vs:
@@ -34,7 +39,24 @@ def post(push_vs):
         # you will probably want to leave this here and
         # put your post() code instead of "pass" below.
         return
-    pass
+    global server
+    global active_user
+    global vsl
+    # TODO(eforde): sign vs
+    # TODO(eforde): shouldn't commit every vs
+    for k in vsl:
+        vsl[k].increment_version()
+        server.commit(k, vsl[k])
+    #vsl[active_user].increment_version()
+    #server.commit(active_user, vsl[active_user])
+
+def create_new_vs(principal):
+    vs = VersionStruct(principal)
+    global vsl
+    for p in vsl:
+        # create the version vector, initialized with each principal's version
+        vs.version_vector[p] = vsl[p].version_vector[p]
+    return vs
 
 class Itable:
     """
@@ -43,7 +65,7 @@ class Itable:
     groups.
     """
     def __init__(self):
-        self.mapping = {}
+        self.mapping = {} # TODO(eforde): could be list?
 
     def load(ihandle):
         b = secfs.store.block.load(ihandle)
@@ -51,11 +73,17 @@ class Itable:
             return None
 
         t = Itable()
-        t.mapping = pickle.loads(b)
+        for (inumber, ihash) in pickle.loads(b):
+            t.mapping[inumber] = ihash
         return t
 
     def bytes(self):
-        return pickle.dumps(self.mapping)
+        return pickle.dumps([(i, self.mapping[i]) for i in sorted(self.mapping.keys())])
+
+    def save(self):
+        ihandle = secfs.store.block.store(self.bytes())
+        return ihandle
+
 
 def resolve(i, resolve_groups = True):
     """
@@ -80,12 +108,13 @@ def resolve(i, resolve_groups = True):
         # someone is trying to look up an i that has not yet been allocated
         return None
 
-    global current_itables
-    if principal not in current_itables:
-        # User does not yet have an itable
+    global vsl
+    if principal not in vsl:
+        # User does not yet have a version struct, and thus itable
         return None 
 
-    t = current_itables[principal]
+    vs = vsl[principal]
+    t = Itable.load(vs.ihandle)
 
     if i.n not in t.mapping:
         raise LookupError("principal {} does not have i {}".format(principal, i))
@@ -153,17 +182,20 @@ def modmap(mod_as, i, ihash):
             raise PermissionError("illegal modmap; tried to mod i {0} as {1}".format(i, mod_as))
 
     # find (or create) the principal's itable
+    global vsl
+    vs = None
     t = None
-    global current_itables
-    if i.p not in current_itables:
+    if i.p not in vsl:
         if i.allocated():
             # this was unexpected;
             # user did not have an itable, but an inumber was given
             raise ReferenceError("itable not available")
+        vs = create_new_vs(i.p)
         t = Itable()
         print("no current list for principal", i.p, "; creating empty table", t.mapping)
     else:
-        t = current_itables[i.p]
+        vs = vsl[i.p]
+        t = Itable.load(vs.ihandle)
 
     # look up (or allocate) the inumber for the i we want to modify
     if not i.allocated():
@@ -179,5 +211,9 @@ def modmap(mod_as, i, ihash):
     if i.p.is_group():
         print("mapping", i.n, "for group", i.p, "into", t.mapping)
     t.mapping[i.n] = ihash # for groups, ihash is an i
-    current_itables[i.p] = t
+
+    new_ihandle = t.save()
+    vs.set_ihandle(new_ihandle)
+    # TODO(eforde): deal with VSes for groups
+    vsl[i.p] = vs
     return i

@@ -2,16 +2,16 @@
 
 import Pyro4
 import threading
-seq_lock = threading.Lock()
 
+import secfs.serializers
+
+seq_lock = threading.Lock()
 
 class SecFSRPC():
     def __init__(self):
         self.roots = {}
 
-        #
-        # NOTE: All your server state *must* go here.
-        #
+        self.vsl = {}
         self.blocks = {
                 # chash => block
         }
@@ -61,6 +61,16 @@ class SecFSRPC():
         chash = hashlib.sha224(blob).hexdigest()
         self.blocks[chash] = blob
         return chash
+
+    @Pyro4.expose
+    def commit(self, principal, vs):
+        # TODO(eforde): verify version struct
+        self.vsl[principal] = vs
+        # TODO(eforde): get rid of old ihandles
+
+    @Pyro4.expose
+    def get_vsl(self):
+        return self.vsl
 
 import sys
 if len(sys.argv) != 2:
