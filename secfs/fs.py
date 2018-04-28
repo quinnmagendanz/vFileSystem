@@ -55,7 +55,7 @@ def init(owner, users, groups):
 
     new_ihash = secfs.store.tree.add(root_i, b'.', root_i)
     secfs.tables.modmap(owner, root_i, new_ihash)
-    new_ihash = secfs.store.tree.add(root_i, b'..', root_i)
+    new_ihash = secfs.store.tree.add(root_i, b'..', root_i) # TODO(eforde): why would .. be mapped to root_i?
     secfs.tables.modmap(owner, root_i, new_ihash)
     print("CREATED ROOT AT", new_ihash)
 
@@ -114,20 +114,24 @@ def _create(parent_i, name, create_as, create_for, isdir):
     node.kind = 0 if isdir else 1
     node.ex = isdir
 
-    # FIXME
-    #
-    # Here, you will need to:
-    #
-    #  - store the newly created inode (node.bytes()) on the server
-    #  - map that block to an i owned by the user
-    #  - if a directory is being created, create entries for . and ..
-    #  - if create_for is a group, you will also have to create a group i for
-    #    that group, and point it to the user's i
-    #  - call link() to link the new i into the directory at parent_i with the
-    #    given name
-    #
-    # Also make sure that you *return the final i* for the new inode!
-    return I(User(0), 0)
+    # store the newly created inode on the server
+    new_hash = secfs.store.block.store(node.bytes())
+    # map the block to an i owned by creaate_for, created with credentials of create_as
+    new_i = secfs.tables.modmap(create_for, I(create_as), new_hash)
+    if isdir:
+        # create . and .. if this is a directory
+        new_ihash = secfs.store.tree.add(new_i, b'.', new_i)
+        secfs.tables.modmap(create_for, new_i, new_ihash)
+        new_ihash = secfs.store.tree.add(new_i, b'..', parent_i)
+        secfs.tables.modmap(create_for, new_i, new_ihash)
+    if create_for.is_group(): # TODO(eforde): I don't really know how to test this
+        # if creating for group, create an i owned by the group, pointing to the user's i
+        secfs.tables.modmap(create_for, I(create_for), new_i)
+    
+    # link the new i into the directoy at parent_i with the given name
+    link(create_for, new_i, parent_i, name)
+
+    return new_i
 
 def create(parent_i, name, create_as, create_for):
     """
