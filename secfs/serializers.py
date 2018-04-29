@@ -17,8 +17,8 @@ def deserialize_version_struct(classname, d):
     vs = VersionStruct(deserialize_principal(d["principal"]))
     for p, ihandle in d["ihandles"]:
         vs.ihandles[deserialize_principal(p)] = ihandle
-    for p, version_no in d["version_vector"]:
-        vs.version_vector[deserialize_principal(p)] = version_no
+    for p, version_no in d["versions"]:
+        vs.versions[deserialize_principal(p)] = version_no
     vs.signature = d["signature"]
     return vs
 
@@ -27,7 +27,7 @@ def serialize_version_struct(vs):
         "__class__": "VersionStruct",
         "principal": serialize_principal(vs.principal),
         "ihandles": [(serialize_principal(p), vs.ihandles[p]) for p in vs.ihandles],
-        "version_vector": [(serialize_principal(p), vs.version_vector[p]) for p in vs.version_vector],
+        "versions": [(serialize_principal(p), vs.versions[p]) for p in vs.versions],
         "signature": vs.signature
     }
 

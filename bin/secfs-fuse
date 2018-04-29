@@ -492,7 +492,6 @@ def _reload_principals():
 
     # load group map
     secfs.fs.groupmap = _read_file(b".groups")  # TODO(eforde): groupmap and usermap need to use same keys as vsl...
-    print("groupS~~~~,", secfs.fs.groupmap)
 
     # load user public key map (and decode their PEM-encoded public keys)
     from cryptography.hazmat.primitives.serialization import load_pem_public_key

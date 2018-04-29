@@ -6,12 +6,17 @@ class Principal:
         return False
     def is_group(self):
         return False
+    def parse(principal):
+        assert(isinstance(principal, str))
+        if principal[0] == "u":
+            return User.parse(principal)
+        if principal[0] == "g":
+            return Group.parse(principal)
 
 class User(Principal):
     def __init__(self, uid):
         if not isinstance(uid, int):
             raise TypeError("id {} is not an int, is a {}".format(uid, type(uid)))
-
         self._uid = uid
     def parse(user):
         assert(user[0] == "u")
@@ -28,8 +33,8 @@ class User(Principal):
         return True
     def __eq__(self, other):
         return isinstance(other, User) and self._uid == other._uid
-    def __str__(self):
-        return "u{}".format(self._uid)
+    def __repr__(self):
+        return "<uid={}>".format(self._uid)
     def __hash__(self):
         return hash(("u", self._uid))
 
@@ -38,7 +43,6 @@ class Group(Principal):
     def __init__(self, gid):
         if not isinstance(gid, int):
             raise TypeError("id {} is not an int, is a {}".format(gid, type(gid)))
-
         self._gid = gid
     def parse(group):
         assert(user[0] == "g")
@@ -47,7 +51,7 @@ class Group(Principal):
         return "g" + str(self._gid)
     def __setstate__(self, state):
         assert(state[0] == "g")
-        self._gid = state[1:]
+        self._gid = int(state[1:])
     @property
     def id(self):
         return self._gid
@@ -55,8 +59,8 @@ class Group(Principal):
         return True
     def __eq__(self, other):
         return isinstance(other, Group) and self._gid == other._gid
-    def __str__(self):
-        return "g{}".format(self._gid)
+    def __repr__(self):
+        return "<gid={}>".format(self._gid)
     def __hash__(self):
         return hash(("g", self._gid))
 
@@ -88,7 +92,7 @@ class I:
         return self._n is not None
     def __eq__(self, other):
         return isinstance(other, I) and self._p == other._p and self._n == other._n
-    def __str__(self):
+    def __repr__(self):
         if self.allocated():
             return "({}, {})".format(self._p, self._n)
         return "({}, <unallocated>)".format(self._p)
@@ -97,20 +101,19 @@ class I:
             raise TypeError("cannot hash unallocated i {}".format(self))
         return hash((self._p, self._n))
 
+from collections import defaultdict
 class VersionStruct:
     def __init__(self, principal):
         if not isinstance(principal, Principal):
             raise TypeError("{} is not a Principal, is a {}".format(principal, type(principal)))
 
         self.principal = principal
-        self.ihandles = {}          # principals -> i-handles
-        self.version_vector = {}    # principals -> version number
-        self.signature = ""         # signature of the version struct
-
-        self.version_vector[principal] = 0
+        self.ihandles = {}                # principals -> i-handles
+        self.versions = defaultdict(int)  # principals -> version number
+        self.signature = ""               # signature of the version struct
 
     def __repr__(self):
-        return "<VersionStruct v{}>".format(self.version)
+        return "<VersionStruct v{}, len{}>".format(self.version, len(self.ihandles))
 
     @property
     def ihandle(self):
@@ -120,31 +123,35 @@ class VersionStruct:
 
     @property
     def version(self):
-        return self.version_vector[self.principal]
+        return self.versions[self.principal]
 
     def set_ihandle(self, principal, ihandle):
-        self.ihandles[principal] = ihandle
+        assert(principal.is_group() or principal == self.principal)
+        if self.ihandles.get(principal) != ihandle:
+            self.ihandles[principal] = ihandle
+            return True
+        return False
 
-    def increment_version(self):
-        self.version_vector[self.principal] += 1
+    def increment_version(self, principal):
+        self.versions[principal] += 1
 
-# It's a pain in the ass to serialize dictionaries with Principals as the key...
-# So wrap a dictionary in this VersionStructList class that automatically converts
-# principals to their string rep, as the key
-class VersionStructList:
+
+# Wrap dictionary in VersionStructList so we can parse principals from RPCs
+from collections.abc import Mapping
+class VersionStructList(Mapping):
     def __init__(self, _d=None):
         self.d = {}
         if not _d is None:
             assert(isinstance(_d, dict) and "_d is not a dict!")
             for k in _d:
-                self[k] = _d[k]
+                self[Principal.parse(k)] = _d[k]
 
     def __repr__(self):
         return self.d.__repr__()
 
     def __contains__(self, key):
-        if isinstance(key, Principal):
-            key = str(key)
+        # if isinstance(key, Principal):
+        #    key = str(key)
         return key in self.d
 
     def __iter__(self):
@@ -152,19 +159,24 @@ class VersionStructList:
             yield k
 
     def __getitem__(self, key):
-        if isinstance(key, Principal):
-            key = str(key)
+        # if isinstance(key, Principal):
+        #     key = str(key)
         return self.d[key]
 
     def __setitem__(self, key, value):
-        if isinstance(key, Principal):
-            key = str(key)
-        if not isinstance(key, str):
-            raise TypeError("Key {} is not a Principal str, is a {}".format(key, type(key)))
+        # if isinstance(key, Principal):
+        #    key = str(key)
+        # if not isinstance(key, str):
+        #     raise TypeError("Key {} is not a Principal str, is a {}".format(key, type(key)))
+        if not isinstance(key, Principal):
+            raise TypeError("Key {} is not a Principal, is a {}".format(key, type(key)))
         if not isinstance(value, VersionStruct):
             raise TypeError("Value {} is not a VersionStruct, is a {}".format(vaule, type(value)))
         assert(value.ihandle)
-        assert(key[0] == "u" or key[0] == "g")
+        # assert(key[0] == "u" or key[0] == "g")
 
         print("SETTING", key, value, value.ihandle)
-        self.d[str(key)] = value
+        self.d[key] = value
+
+    def __len__(self):
+        return len(self.d)

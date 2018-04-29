@@ -4,6 +4,7 @@ import Pyro4
 import threading
 
 import secfs.serializers
+from secfs.types import Principal, User, Group
 
 seq_lock = threading.Lock()
 
@@ -64,9 +65,10 @@ class SecFSRPC():
 
     @Pyro4.expose
     def commit(self, principal, vs):
+        assert principal[0] == "u"
         # TODO(eforde): verify version struct
-        self.vsl[principal] = vs
         # TODO(eforde): get rid of old ihandles
+        self.vsl[principal] = vs
 
     @Pyro4.expose
     def get_vsl(self):

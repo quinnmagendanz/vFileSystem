@@ -116,7 +116,7 @@ def _create(parent_i, name, create_as, create_for, isdir):
 
     # store the newly created inode on the server
     new_hash = secfs.store.block.store(node.bytes())
-    # map the block to an i owned by creaate_for, created with credentials of create_as
+    # map the block to an i owned by create_for, created with credentials of create_as
     new_i = secfs.tables.modmap(create_as, I(create_for), new_hash)
     if isdir:
         # create . and .. if this is a directory
@@ -124,9 +124,6 @@ def _create(parent_i, name, create_as, create_for, isdir):
         secfs.tables.modmap(create_as, new_i, new_ihash)
         new_ihash = secfs.store.tree.add(new_i, b'..', parent_i)
         secfs.tables.modmap(create_as, new_i, new_ihash)
-    if create_for.is_group():
-        # if creating for group, create an i owned by the group, pointing to the user's i
-        secfs.tables.modmap(create_as, I(create_for), new_i)
     
     # link the new i into the directoy at parent_i with the given name
     link(create_as, new_i, parent_i, name)
