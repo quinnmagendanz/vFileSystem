@@ -221,8 +221,9 @@ class SecFS(llfuse.Operations):
 
         print("root is at", root)
         if isinstance(root, tuple):
+            print("is tuple", root)
             # because the server doesn't know serialization of Is
-            root = I(User(root[0][0]), root[1])
+            root = I(User.parse(root[0]), root[1])
 
         # map FUSE inode root to real SecFS root
         global rinodes
@@ -490,7 +491,8 @@ def _reload_principals():
             )
 
     # load group map
-    secfs.fs.groupmap = _read_file(b".groups")
+    secfs.fs.groupmap = _read_file(b".groups")  # TODO(eforde): groupmap and usermap need to use same keys as vsl...
+    print("groupS~~~~,", secfs.fs.groupmap)
 
     # load user public key map (and decode their PEM-encoded public keys)
     from cryptography.hazmat.primitives.serialization import load_pem_public_key

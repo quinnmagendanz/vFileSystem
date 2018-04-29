@@ -13,6 +13,9 @@ class User(Principal):
             raise TypeError("id {} is not an int, is a {}".format(uid, type(uid)))
 
         self._uid = uid
+    def parse(user):
+        assert(user[0] == "u")
+        return User(int(user[1:]))
     def __getstate__(self):
         return "u" + str(self._uid)
     def __setstate__(self, state):
@@ -37,6 +40,9 @@ class Group(Principal):
             raise TypeError("id {} is not an int, is a {}".format(gid, type(gid)))
 
         self._gid = gid
+    def parse(group):
+        assert(user[0] == "g")
+        return Group(int(group[1:]))
     def __getstate__(self):
         return "g" + str(self._gid)
     def __setstate__(self, state):
@@ -116,8 +122,8 @@ class VersionStruct:
     def version(self):
         return self.version_vector[self.principal]
 
-    def set_ihandle(self, ihandle):
-        self.ihandles[self.principal] = ihandle
+    def set_ihandle(self, principal, ihandle):
+        self.ihandles[principal] = ihandle
 
     def increment_version(self):
         self.version_vector[self.principal] += 1

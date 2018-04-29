@@ -185,16 +185,16 @@ def modmap(mod_as, i, ihash):
     global vsl
     vs = None
     t = None
-    if i.p not in vsl:
+    if mod_as not in vsl:
         if i.allocated():
             # this was unexpected;
             # user did not have an itable, but an inumber was given
             raise ReferenceError("itable not available")
-        vs = create_new_vs(i.p)
+        vs = create_new_vs(mod_as)
         t = Itable()
-        print("no current list for principal", i.p, "; creating empty table", t.mapping)
+        print("no current list for principal", mod_as, "; creating empty table", t.mapping)
     else:
-        vs = vsl[i.p]
+        vs = vsl[mod_as]
         t = Itable.load(vs.ihandle)
 
     # look up (or allocate) the inumber for the i we want to modify
@@ -213,7 +213,7 @@ def modmap(mod_as, i, ihash):
     t.mapping[i.n] = ihash # for groups, ihash is an i
 
     new_ihandle = t.save()
-    vs.set_ihandle(new_ihandle)
+    vs.set_ihandle(i.p, new_ihandle)
     # TODO(eforde): deal with VSes for groups
-    vsl[i.p] = vs
+    vsl[mod_as] = vs
     return i
