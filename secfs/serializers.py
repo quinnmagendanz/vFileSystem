@@ -14,6 +14,7 @@ def deserialize_principal(p):
 
 def deserialize_version_struct(classname, d):
     assert(d["__class__"] == "VersionStruct")
+    print("deserializing sig:", d["signature"])
     vs = VersionStruct(deserialize_principal(d["principal"]))
     for p, ihandle in d["ihandles"]:
         vs.ihandles[deserialize_principal(p)] = ihandle
@@ -23,6 +24,7 @@ def deserialize_version_struct(classname, d):
     return vs
 
 def serialize_version_struct(vs):
+    print("serializing sig:", vs.signature)
     return {
         "__class__": "VersionStruct",
         "principal": serialize_principal(vs.principal),

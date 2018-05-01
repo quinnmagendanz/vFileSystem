@@ -10,6 +10,7 @@ import pickle
 import secfs.store
 import secfs.fs
 from secfs.types import I, Principal, User, Group, VersionStruct, VersionStructList
+from secfs.crypto import sign, verify, load_private_key
 
 vsl = VersionStructList()  # User -> VersionStruct
 itables = {}  # Principal -> itable
@@ -27,10 +28,11 @@ def pre(refresh, user):
     an exclusive server lock.
     """
     update_vsl()
-
+    # TODO(eforde): verify that last vs is in the vsl
     # refresh usermap and groupmap
     if refresh != None:
         refresh()
+    assert(user.is_user())
     global active_user  # TODO(eforde): ewewewewewew
     active_user = user
 
@@ -44,32 +46,40 @@ def post(push_vs):
     global active_user
     global vsl
     global itables
-    if not active_user in itables:
+    updated_vs = update_vs(active_user)
+    if updated_vs is not None:
+        print("Commiting vs {} for".format(updated_vs), active_user)
+        server.commit(active_user, updated_vs)
+
+    active_user = None
+    print("")
+
+def update_vs(user):
+    if not user in itables:
         # was a read only operation for a new user, nothing to commit
         print("No itable for {}, not committing vs\n".format(active_user))
-        return
+        return None
 
-    vs = vsl.get(active_user)
+    vs = vsl.get(user)
     if vs is None:
-        print("ALERT!!! VS is none for user", active_user)
-        for p in itables:
-            print(active_user, p, type(active_user), type(p))
-        vs = create_new_vs(active_user)
-        vsl[active_user] = vs
+        print("ALERT!!! VS is none for user", user)
+        vs = create_new_vs(user)
+        vsl[user] = vs
 
     # Update ihandles for this vs
     for p in itables:
         itable = itables[p]
         if itable.updated:
             # make sure updated ihandles were allowed to be updated
-            assert((p.is_user() and p == active_user) or
-                    active_user in secfs.fs.groupmap[p])
+            assert((p.is_user() and p == user) or
+                    user in secfs.fs.groupmap[p])
             if vs.set_ihandle(p, itable.ihandle):
                 vs.increment_version(p)
-    # TODO(eforde): sign vs
-    print("Commiting vs {} for".format(vs), active_user)
-    server.commit(active_user, vs)
-    print("")
+    date = vs.bytes()
+    private_key = load_private_key("./user-{}-key.pem".format(user._uid))
+    vs.signature = sign(private_key, date)
+    # TODO(eforde): verify vs total order
+    return vs
 
 def update_vsl():
     global server
@@ -80,15 +90,18 @@ def update_vsl():
     itables = {}
     # populate itables
     for user in vsl:
-        for principal in vsl[user].ihandles:
-            ihandle = vsl[user].ihandles[principal]
-            version = vsl[user].versions[principal]
+        vs = vsl[user]
+        print(vs, vs.bytes())
+        print(vs.signature)
+        assert(verify(secfs.fs.usermap[user], vs.signature, vs.bytes()))
+        for principal in vs.ihandles:
+            ihandle = vs.ihandles[principal]
+            version = vs.versions[principal]
             if ((principal in itables and itables[principal].version < version) or
                 principal not in itables):
                 itables[principal] = Itable(ihandle, version)
             elif itables[principal].version == version:
                 assert(itables[principal].ihandle == ihandle)
-
     print("    with itables", itables)
 
 def create_new_vs(principal):

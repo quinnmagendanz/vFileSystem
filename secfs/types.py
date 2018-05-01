@@ -102,6 +102,8 @@ class I:
         return hash((self._p, self._n))
 
 from collections import defaultdict
+from secfs.crypto import sha256_hash
+import pickle
 class VersionStruct:
     def __init__(self, principal):
         if not isinstance(principal, Principal):
@@ -134,6 +136,12 @@ class VersionStruct:
 
     def increment_version(self, principal):
         self.versions[principal] += 1
+
+    def bytes(self):
+        ordered_ihandles = tuple([(str(p), self.ihandles[p]) for p in sorted(self.ihandles.keys())])
+        ordered_versions = tuple([(str(p), self.versions[p]) for p in sorted(self.versions.keys())])
+        message = (self.principal, ordered_ihandles, ordered_versions)
+        return pickle.dumps(message)
 
 
 # Wrap dictionary in VersionStructList so we can parse principals from RPCs

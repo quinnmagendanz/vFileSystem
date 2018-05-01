@@ -1,10 +1,11 @@
 # This file implements the crypto parts of SecFS
 
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.exceptions import InvalidSignature
 from cryptography.fernet import Fernet
 from secfs.types import I, Principal, User, Group
 
@@ -24,6 +25,49 @@ def register_keyfile(user, f):
             password=None,
             backend=default_backend()
         )
+
+def sha256_hash(data):
+    assert(isinstance(data, bytes))
+    digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
+    digest.update(data)
+    return digest.finalize()
+
+def sign(private_key, data):
+    assert isinstance(private_key, RSAPrivateKey)
+    signature = private_key.sign(
+        data,
+        padding.PSS(
+            mgf=padding.MGF1(hashes.SHA256()),
+            salt_length=padding.PSS.MAX_LENGTH
+        ),
+        hashes.SHA256()
+    )
+    print("Sig", signature)
+    return signature
+
+def verify(public_key, signature, data):
+    try:
+        public_key.verify(
+            signature,
+            data,
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256()
+        )
+        return True
+    except InvalidSignature:
+        return False
+
+def load_private_key(filename):
+    with open(filename, "rb") as key_file:
+        private_key = serialization.load_pem_private_key(
+            key_file.read(),
+            password=None,
+            backend=default_backend()
+        )
+    return private_key
 
 def decrypt_sym(key, data):
     """
