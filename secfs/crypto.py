@@ -42,7 +42,6 @@ def sign(private_key, data):
         ),
         hashes.SHA256()
     )
-    print("Sig", signature)
     return signature
 
 def verify(public_key, signature, data):

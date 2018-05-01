@@ -78,7 +78,7 @@ def update_vs(user):
     date = vs.bytes()
     private_key = load_private_key("./user-{}-key.pem".format(user._uid))
     vs.signature = sign(private_key, date)
-    # TODO(eforde): verify vs total order
+    # TODO(eforde): verify vsl is a total order on <= operator (defined in paper)
     return vs
 
 def update_vsl():
@@ -91,8 +91,6 @@ def update_vsl():
     # populate itables
     for user in vsl:
         vs = vsl[user]
-        print(vs, vs.bytes())
-        print(vs.signature)
         assert(verify(secfs.fs.usermap[user], vs.signature, vs.bytes()))
         for principal in vs.ihandles:
             ihandle = vs.ihandles[principal]
@@ -124,7 +122,7 @@ class Itable:
         self.version = _version
         self.ihandle = _ihandle
         self.updated = False
-        self.mapping = {} # TODO(eforde): could be list?
+        self.mapping = {}
         if not _ihandle:
             return
         b = secfs.store.block.load(_ihandle)

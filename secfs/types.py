@@ -138,8 +138,15 @@ class VersionStruct:
         self.versions[principal] += 1
 
     def bytes(self):
-        ordered_ihandles = tuple([(str(p), self.ihandles[p]) for p in sorted(self.ihandles.keys())])
-        ordered_versions = tuple([(str(p), self.versions[p]) for p in sorted(self.versions.keys())])
+        key_func = lambda p: str(p)
+        ordered_ihandles = tuple([
+            (str(p), self.ihandles[p]) for p in
+            sorted(self.ihandles.keys(), key=key_func)
+        ])
+        ordered_versions = tuple([
+            (str(p), self.versions[p]) for p in
+            sorted(self.versions.keys(), key=key_func)
+        ])
         message = (self.principal, ordered_ihandles, ordered_versions)
         return pickle.dumps(message)
 
@@ -158,8 +165,6 @@ class VersionStructList(Mapping):
         return self.d.__repr__()
 
     def __contains__(self, key):
-        # if isinstance(key, Principal):
-        #    key = str(key)
         return key in self.d
 
     def __iter__(self):
@@ -167,23 +172,15 @@ class VersionStructList(Mapping):
             yield k
 
     def __getitem__(self, key):
-        # if isinstance(key, Principal):
-        #     key = str(key)
         return self.d[key]
 
     def __setitem__(self, key, value):
-        # if isinstance(key, Principal):
-        #    key = str(key)
-        # if not isinstance(key, str):
-        #     raise TypeError("Key {} is not a Principal str, is a {}".format(key, type(key)))
         if not isinstance(key, Principal):
             raise TypeError("Key {} is not a Principal, is a {}".format(key, type(key)))
         if not isinstance(value, VersionStruct):
             raise TypeError("Value {} is not a VersionStruct, is a {}".format(vaule, type(value)))
         assert(value.ihandle)
-        # assert(key[0] == "u" or key[0] == "g")
 
-        print("SETTING", key, value, value.ihandle)
         self.d[key] = value
 
     def __len__(self):
