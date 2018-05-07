@@ -134,8 +134,12 @@ class VersionStruct:
             return True
         return False
 
-    def increment_version(self, principal):
-        self.versions[principal] += 1
+    def set_version(self, principal, version):
+        if principal.is_user():
+            assert(version == self.versions[principal] + 1)
+        elif principal.is_group():
+            assert(version > self.versions[principal])
+        self.versions[principal] = version
 
     def bytes(self):
         key_func = lambda p: str(p)
@@ -166,6 +170,12 @@ class VersionStructList(Mapping):
 
     def __contains__(self, key):
         return key in self.d
+
+    def contains_old_vs(self, old_vs_bytes):
+        for p in self:
+            if self[p].bytes() == old_vs_bytes:
+                return True
+        return False
 
     def __iter__(self):
         for k in self.d:

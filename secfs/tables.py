@@ -14,6 +14,7 @@ from secfs.crypto import sign, verify, load_private_key
 
 vsl = VersionStructList()  # User -> VersionStruct
 itables = {}  # Principal -> itable
+last_vs_bytes = None
 
 # a server connection handle is passed to us at mount time by secfs-fuse
 server = None
@@ -28,12 +29,11 @@ def pre(refresh, user):
     an exclusive server lock.
     """
     update_vsl()
-    # TODO(eforde): verify that last vs is in the vsl
     # refresh usermap and groupmap
     if refresh != None:
         refresh()
     assert(user.is_user())
-    global active_user  # TODO(eforde): ewewewewewew
+    global active_user
     active_user = user
 
 def post(push_vs):
@@ -46,10 +46,12 @@ def post(push_vs):
     global active_user
     global vsl
     global itables
+    global last_vs_bytes
     updated_vs = update_vs(active_user)
     if updated_vs is not None:
         print("Commiting vs {} for".format(updated_vs), active_user)
         server.commit(active_user, updated_vs)
+        last_vs_bytes = updated_vs.bytes()
 
     active_user = None
     print("")
@@ -74,7 +76,7 @@ def update_vs(user):
             assert((p.is_user() and p == user) or
                     user in secfs.fs.groupmap[p])
             if vs.set_ihandle(p, itable.ihandle):
-                vs.increment_version(p)
+                vs.set_version(p, itable.version + 1)
     date = vs.bytes()
     private_key = load_private_key("./user-{}-key.pem".format(user._uid))
     vs.signature = sign(private_key, date)
@@ -85,6 +87,7 @@ def update_vsl():
     global server
     global vsl
     global itables
+    global last_vs_bytes
     vsl = VersionStructList(server.get_vsl())
     print("DOWNLOADED VSL", vsl, type(vsl))
     itables = {}
@@ -95,12 +98,16 @@ def update_vsl():
         for principal in vs.ihandles:
             ihandle = vs.ihandles[principal]
             version = vs.versions[principal]
+            print("Principal {} from {}'s VS has version {} ihandle: {}".format(principal, user, version, ihandle))
             if ((principal in itables and itables[principal].version < version) or
                 principal not in itables):
                 itables[principal] = Itable(ihandle, version)
             elif itables[principal].version == version:
                 assert(itables[principal].ihandle == ihandle)
     print("    with itables", itables)
+    # not sure how to assert this since another client can act on behalf of same user
+    # assert((last_vs_bytes is None or vsl.contains_old_vs(last_vs_bytes)) and "VSL should contain last VS")
+    # TODO(eforde): httpd should be able to create shared directories
 
 def create_new_vs(principal):
     vs = VersionStruct(principal)
@@ -109,7 +116,7 @@ def create_new_vs(principal):
         # create the version vector, initialized with each principal's version
         vs.versions[p] = itables[p].version
     vs.set_ihandle(principal, itables[principal].ihandle)
-    vs.increment_version(principal)
+    vs.set_version(principal, 1)
     return vs
 
 class Itable:
