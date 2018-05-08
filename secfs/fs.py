@@ -81,7 +81,7 @@ def init(owner, users, groups):
 
     return root_i
 
-def _create(parent_i, name, create_as, create_for, isdir):
+def _create(parent_i, name, create_as, create_for, isdir, encrypt):
     """
     _create allocates a new file, and links it into the directory at parent_i
     with the given name. The new file is owned by create_for, but is created
@@ -108,7 +108,11 @@ def _create(parent_i, name, create_as, create_for, isdir):
         else:
             raise PermissionError("cannot create in user-writeable directory {0} as {1}".format(parent_i, create_as))
 
+    # TODO(eforde): encrypt if parent directory is encrypted
+    # encrypt = encrypt or parent_i.encrypted
+
     node = Inode()
+    node.encrypted = 1 if encrypt else 0
     node.ctime = time.time()
     node.mtime = node.ctime
     node.kind = 0 if isdir else 1
@@ -120,9 +124,11 @@ def _create(parent_i, name, create_as, create_for, isdir):
     new_i = secfs.tables.modmap(create_as, I(create_for), new_hash)
     if isdir:
         # create . and .. if this is a directory
-        new_ihash = secfs.store.tree.add(new_i, b'.', new_i)
+        table_key = secfs.tables.get_itable_key(create_for, create_as) if node.encrypted else None
+        print("Node encrypted? ", node.encrypted, table_key)
+        new_ihash = secfs.store.tree.add(new_i, b'.', new_i, table_key)
         secfs.tables.modmap(create_as, new_i, new_ihash)
-        new_ihash = secfs.store.tree.add(new_i, b'..', parent_i)
+        new_ihash = secfs.store.tree.add(new_i, b'..', parent_i, table_key)
         secfs.tables.modmap(create_as, new_i, new_ihash)
     
     # link the new i into the directoy at parent_i with the given name
@@ -130,19 +136,19 @@ def _create(parent_i, name, create_as, create_for, isdir):
 
     return new_i
 
-def create(parent_i, name, create_as, create_for):
+def create(parent_i, name, create_as, create_for, encrypt):
     """
     Create a new file.
     See secfs.fs._create
     """
-    return _create(parent_i, name, create_as, create_for, False)
+    return _create(parent_i, name, create_as, create_for, False, encrypt)
 
-def mkdir(parent_i, name, create_as, create_for):
+def mkdir(parent_i, name, create_as, create_for, encrypt):
     """
     Create a new directory.
     See secfs.fs._create
     """
-    return _create(parent_i, name, create_as, create_for, True)
+    return _create(parent_i, name, create_as, create_for, True, encrypt)
 
 def read(read_as, i, off, size):
     """
@@ -159,7 +165,10 @@ def read(read_as, i, off, size):
         else:
             raise PermissionError("cannot read from user-readable file {0} as {1}".format(i, read_as))
 
-    return get_inode(i).read()[off:off+size]
+    node = get_inode(i)
+    table_key = secfs.tables.get_itable_key(i.p, read_as) if node.encrypted else None
+
+    return node.read(table_key)[off:off+size]
 
 def write(write_as, i, off, buf):
     """
@@ -177,15 +186,18 @@ def write(write_as, i, off, buf):
             raise PermissionError("cannot write to user-owned file {0} as {1}".format(i, write_as))
 
     node = get_inode(i)
+    table_key = secfs.tables.get_itable_key(i.p, write_as) if node.encrypted else None
 
     # TODO: this is obviously stupid -- should not get rid of blocks that haven't changed
-    bts = node.read()
+    bts = node.read(table_key)
 
     # write also allows us to extend a file
     if off + len(buf) > len(bts):
         bts = bts[:off] + buf
     else:
         bts = bts[:off] + buf + bts[off+len(buf):]
+    if node.encrypted:
+        bts = secfs.crypto.encrypt_sym(table_key, bts)
 
     # update the inode
     node.blocks = [secfs.store.block.store(bts)]
@@ -204,6 +216,7 @@ def readdir(i, off):
     Each returned list item is a tuple of an i and an index. The index can be
     used to request a suffix of the list at a later time.
     """
+    # TODO(eforde): encrypted directories?
     dr = Directory(i)
     if dr == None:
         return None

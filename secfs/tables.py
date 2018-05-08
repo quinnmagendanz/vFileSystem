@@ -8,9 +8,9 @@ from collections import defaultdict
 
 import pickle
 import secfs.store
+import secfs.crypto
 import secfs.fs
 from secfs.types import I, Principal, User, Group, VersionStruct, VersionStructList
-from secfs.crypto import sign, verify, load_private_key
 
 vsl = VersionStructList()  # User -> VersionStruct
 itables = {}  # Principal -> itable
@@ -55,7 +55,7 @@ def post(push_vs):
 
     active_user = None
     print("")
-
+ 
 def update_vs(user):
     if not user in itables:
         # was a read only operation for a new user, nothing to commit
@@ -75,11 +75,11 @@ def update_vs(user):
             # make sure updated ihandles were allowed to be updated
             assert((p.is_user() and p == user) or
                     user in secfs.fs.groupmap[p])
-            if vs.set_ihandle(p, itable.ihandle):
+            if vs.set_ihandle(p, itable.save()):
                 vs.set_version(p, itable.version + 1)
     date = vs.bytes()
-    private_key = load_private_key("./user-{}-key.pem".format(user._uid))
-    vs.signature = sign(private_key, date)
+    private_key = secfs.crypto.load_private_key(user)
+    vs.signature = secfs.crypto.sign(private_key, date)
     # TODO(eforde): verify vsl is a total order on <= operator (defined in paper)
     return vs
 
@@ -89,21 +89,21 @@ def update_vsl():
     global itables
     global last_vs_bytes
     vsl = VersionStructList(server.get_vsl())
-    print("DOWNLOADED VSL", vsl, type(vsl))
     itables = {}
     # populate itables
     for user in vsl:
         vs = vsl[user]
-        assert(verify(secfs.fs.usermap[user], vs.signature, vs.bytes()))
+        assert(secfs.crypto.verify(secfs.fs.usermap[user], vs.signature, vs.bytes()))
         for principal in vs.ihandles:
             ihandle = vs.ihandles[principal]
             version = vs.versions[principal]
             print("Principal {} from {}'s VS has version {} ihandle: {}".format(principal, user, version, ihandle))
             if ((principal in itables and itables[principal].version < version) or
                 principal not in itables):
-                itables[principal] = Itable(ihandle, version)
+                itables[principal] = Itable.load(ihandle, version, principal)
             elif itables[principal].version == version:
                 assert(itables[principal].ihandle == ihandle)
+    print("DOWNLOADED VSL", vsl, type(vsl))
     print("    with itables", itables)
     # not sure how to assert this since another client can act on behalf of same user
     # assert((last_vs_bytes is None or vsl.contains_old_vs(last_vs_bytes)) and "VSL should contain last VS")
@@ -125,25 +125,69 @@ class Itable:
     element in an i tuple) to an inode hash for users, and to a user's i for
     groups.
     """
-    def __init__(self, _ihandle=None, _version=0):
-        self.version = _version
-        self.ihandle = _ihandle
+    def __init__(self):
+        self.version = 0
+        self.ihandle = None
         self.updated = False
-        self.mapping = {}
-        if not _ihandle:
-            return
-        b = secfs.store.block.load(_ihandle)
+        self.keys = {}  # principals => encrypted key
+        self.mapping = {}  # inumber => ihash
+
+    def create(owner):
+        itable = Itable()
+        itable._generate_private_keys(owner)
+        return itable
+
+    def load(ihandle, version, owner):
+        itable = Itable()
+        itable.ihandle = ihandle
+        itable.version = version
+        b = secfs.store.block.load(ihandle)
         if b == None:
             # TODO(eforde): this may happen if we start deleting unused ihandles on the server?
             raise KeyError("No block for ihandle {}".format(_ihandle))
-        for (inumber, ihash) in pickle.loads(b):
-            self.mapping[inumber] = ihash
+        rep = pickle.loads(b)
+        for (inumber, ihash) in rep[0]:
+            itable.mapping[inumber] = ihash
+        for (principal, encrypted_key) in rep[1]:
+            itable.keys[Principal.parse(principal)] = encrypted_key
+
+        if not len(itable.keys):
+            # This itable was probably made during init when usermap wasn't populated
+            itable._generate_private_keys(owner)
+        return itable
+
+    def _generate_private_keys(self, owner):
+        if not len(secfs.fs.usermap):  # Hack to not generate private keys during init
+            print("No usermap - can't generate keys for itable owned by {}".format(owner))
+            return
+
+        print("Generating keys for itable owned by {}".format(owner))
+        private_key = secfs.crypto.generate_sym_key()  # used for encrypted files for the owner
+        
+        if owner.is_user():
+            print("encrypting key {} for user {}".format(private_key, owner))
+            # Encrypt this itable's private key with the owner's public key
+            self.keys[owner] = secfs.crypto.encrypt(secfs.fs.usermap[owner], private_key)
+        elif owner.is_group():
+            # Encrypt this itable's private key with each member's public key
+            for user in secfs.fs.groupmap[owner]:
+                print("encrypting key {} for user {} in group {}".format(private_key, user, owner))
+                self.keys[user] = secfs.crypto.encrypt(secfs.fs.usermap[user], private_key)
+        # Mark the table as updated so we upload the itable owners' keys to the server
+        # We throw away the private key here, so only owners can decrypt their encrypted key
+        self.updated = True
+        # TODO(eforde): deal with users being added to the group later?
 
     def __repr__(self):
         return "<Itable v{} {}>".format(self.version, self.ihandle)
 
     def bytes(self):
-        return pickle.dumps([(i, self.mapping[i]) for i in sorted(self.mapping.keys())])
+        rep = (
+            [(i, self.mapping[i]) for i in sorted(self.mapping.keys())],
+            [(p.__getstate__(), self.keys[p]) for p in sorted(self.keys.keys(), key=lambda k: str(k))]
+            # TODO(eforde): why do i have to use getstate here
+        )
+        return pickle.dumps(rep)
 
     def save(self):
         new_ihandle = secfs.store.block.store(self.bytes())
@@ -151,6 +195,23 @@ class Itable:
         self.updated = True
         return new_ihandle
 
+    def get_key(self, user):
+        """
+        Gets the private key for the user if they are an owner of the itable
+        """
+        if not user in self.keys:
+            raise PermissionError("user {} does not own itable".format(user))
+        private_key = secfs.crypto.load_private_key(user)
+        return secfs.crypto.decrypt(private_key, self.keys[user])
+
+def get_itable_key(table_principal, user):
+    if not isinstance(table_principal, Principal):
+        raise TypeError("{} is not a Principal, is a {}".format(table_principal, type(table_principal)))
+    if not isinstance(user, User):
+        raise TypeError("{} is not a User, is a {}".format(user, type(user)))
+    global itables
+    assert(table_principal in itables)
+    return itables[table_principal].get_key(user)
 
 def resolve(i, resolve_groups = True):
     """
@@ -255,7 +316,7 @@ def modmap(mod_as, i, ihash):
             # this was unexpected;
             # user did not have an itable, but an inumber was given
             raise ReferenceError("itable not available")
-        t = Itable()
+        t = Itable.create(i.p)
         itables[i.p] = t
         print("no current list for principal", i.p, "; creating empty table", t.mapping)
     else:

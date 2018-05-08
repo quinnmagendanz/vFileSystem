@@ -12,6 +12,7 @@ class Principal:
             return User.parse(principal)
         if principal[0] == "g":
             return Group.parse(principal)
+        assert(False)
 
 class User(Principal):
     def __init__(self, uid):

@@ -249,7 +249,7 @@ class SecFS(llfuse.Operations):
     ## and http://fuse.sourceforge.net/doxygen/structfuse__operations.html
 
     def lookup(self, inode_p, name, ctx):
-        print("LOOKUP", inode_p, name)
+        print("LOOKUP", inode_p, name, ctx.uid)
 
         self._pre(User(ctx.uid))
         i = secfs.store.tree.find_under(inodes[inode_p], name)
@@ -369,7 +369,7 @@ class SecFS(llfuse.Operations):
             encrypt = True
 
         try:
-            i = secfs.fs.mkdir(inodes[parent_inode], name, User(ctx.uid), who)
+            i = secfs.fs.mkdir(inodes[parent_inode], name, User(ctx.uid), who, encrypt)
             return self._post_and_getattr(i)
         except PermissionError as e:
             print("Illegal access:", e)
@@ -395,7 +395,7 @@ class SecFS(llfuse.Operations):
             encrypt = True
 
         try:
-            i = secfs.fs.create(inodes[parent_inode], name, User(ctx.uid), who)
+            i = secfs.fs.create(inodes[parent_inode], name, User(ctx.uid), who, encrypt)
             ret = (new_fh(i, ctx.uid), _getattr(i))
             self._post()
             return ret
@@ -478,6 +478,7 @@ def _reload_principals():
     Reloads the set of known principals by reading and parsing /.users and
     /.groups, and the repopulating secfs.fs.usermap and secfs.fs.groupmap.
     """
+    print("reloading principals")
     def _read_file(fname):
         """
         Simple helper function for reading the pickled contents of a SecFS file
@@ -491,7 +492,7 @@ def _reload_principals():
             )
 
     # load group map
-    secfs.fs.groupmap = _read_file(b".groups")  # TODO(eforde): groupmap and usermap need to use same keys as vsl...
+    secfs.fs.groupmap = _read_file(b".groups")
 
     # load user public key map (and decode their PEM-encoded public keys)
     from cryptography.hazmat.primitives.serialization import load_pem_public_key

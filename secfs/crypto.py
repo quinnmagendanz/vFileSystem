@@ -59,7 +59,9 @@ def verify(public_key, signature, data):
     except InvalidSignature:
         return False
 
-def load_private_key(filename):
+def load_private_key(user):
+    assert(user.is_user())
+    filename = "./user-{}-key.pem".format(user._uid)
     with open(filename, "rb") as key_file:
         private_key = serialization.load_pem_private_key(
             key_file.read(),
@@ -67,6 +69,9 @@ def load_private_key(filename):
             backend=default_backend()
         )
     return private_key
+
+def generate_sym_key():
+    return Fernet.generate_key()
 
 def decrypt_sym(key, data):
     """
@@ -81,6 +86,32 @@ def encrypt_sym(key, data):
     """
     f = Fernet(key)
     return f.encrypt(data)
+
+def decrypt(private_key, ciphertext):
+    """
+    Decrypt the given ciphertext with the given private key.
+    """
+    return private_key.decrypt(
+        ciphertext,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
+
+def encrypt(public_key, message):
+    """
+    Encrypt the given message with the given public key.
+    """
+    return public_key.encrypt(
+        message,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
 
 def generate_key(user):
     """
