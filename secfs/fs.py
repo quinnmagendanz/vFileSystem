@@ -125,7 +125,6 @@ def _create(parent_i, name, create_as, create_for, isdir, encrypt):
     if isdir:
         # create . and .. if this is a directory
         table_key = secfs.tables.get_itable_key(create_for, create_as) if node.encrypted else None
-        print("Node encrypted? ", node.encrypted, table_key)
         new_ihash = secfs.store.tree.add(new_i, b'.', new_i, table_key)
         secfs.tables.modmap(create_as, new_i, new_ihash)
         new_ihash = secfs.store.tree.add(new_i, b'..', parent_i, table_key)
@@ -210,14 +209,15 @@ def write(write_as, i, off, buf):
 
     return len(buf)
 
-def readdir(i, off):
+def readdir(i, off, read_as):
     """
     Return a list of is in the directory at i.
     Each returned list item is a tuple of an i and an index. The index can be
     used to request a suffix of the list at a later time.
     """
     # TODO(eforde): encrypted directories?
-    dr = Directory(i)
+    table_key = secfs.tables.get_itable_key(i.p, read_as)
+    dr = Directory(i, table_key)
     if dr == None:
         return None
 

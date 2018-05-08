@@ -8,15 +8,19 @@ import secfs.store.block
 from secfs.store.inode import Inode
 from secfs.types import I, Principal, User, Group
 
-def find_under(dir_i, name):
+def find_under(dir_i, name, read_as=None):
     """
     Attempts to find the i of the file or directory with the given name under
     the directory at i.
     """
     if not isinstance(dir_i, I):
         raise TypeError("{} is not an I, is a {}".format(dir_i, type(dir_i)))
-
-    dr = Directory(dir_i)
+    
+    key = (
+        secfs.tables.get_itable_key(dir_i.p, read_as)
+        if read_as else None
+    )
+    dr = Directory(dir_i, key)
     for f in dr.children:
         if f[0] == name:
             return f[1]
@@ -27,7 +31,7 @@ class Directory:
     A Directory is used to marshal and unmarshal the contents of directory
     inodes. To load a directory, an i must be given.
     """
-    def __init__(self, i, key=None):
+    def __init__(self, i, key):
         if not isinstance(i, I):
             raise TypeError("{} is not an I, is a {}".format(i, type(i)))
 

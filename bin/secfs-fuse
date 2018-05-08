@@ -249,10 +249,20 @@ class SecFS(llfuse.Operations):
     ## and http://fuse.sourceforge.net/doxygen/structfuse__operations.html
 
     def lookup(self, inode_p, name, ctx):
-        print("LOOKUP", inode_p, name, ctx.uid)
+        print("LOOKUP", inode_p, name)
 
-        self._pre(User(ctx.uid))
-        i = secfs.store.tree.find_under(inodes[inode_p], name)
+        user = User(ctx.uid)
+        self._pre(user)
+        try:
+            i = secfs.store.tree.find_under(inodes[inode_p], name, user)
+        except PermissionError as e:
+            print("Illegal access:", e)
+            self._post()
+            raise llfuse.FUSEError(errno.EACCES)
+        except:
+            self._post()
+            raise
+
         if i == None:
             self._post()
             raise llfuse.FUSEError(errno.ENOENT)
@@ -282,15 +292,24 @@ class SecFS(llfuse.Operations):
     def readdir(self, fh, off):
         print("READDIR", fh, off)
 
-        self._pre(fhs[fh][1])
+        user = fhs[fh][1]
+        self._pre(user)
 
         node = secfs.fs.get_inode(fhs[fh][0])
         if node.kind != 0:
             raise llfuse.FUSEError(errno.ENOTDIR)
 
-        for e, o in secfs.fs.readdir(fhs[fh][0], off):
-            print (e[0].decode('utf-8'), e[1], o)
-            yield (e[0], _getattr(e[1]), o)
+        try:
+            for e, o in secfs.fs.readdir(fhs[fh][0], off, user):
+                print (e[0].decode('utf-8'), e[1], o)
+                yield (e[0], _getattr(e[1]), o)
+        except PermissionError as e:
+            print("Illegal access:", e)
+            self._post()
+            raise llfuse.FUSEError(errno.EACCES)
+        except:
+            self._post()
+            raise
 
         self._post()
 

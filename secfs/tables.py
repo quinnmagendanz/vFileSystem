@@ -200,7 +200,7 @@ class Itable:
         Gets the private key for the user if they are an owner of the itable
         """
         if not user in self.keys:
-            raise PermissionError("user {} does not own itable".format(user))
+            return None
         private_key = secfs.crypto.load_private_key(user)
         return secfs.crypto.decrypt(private_key, self.keys[user])
 
@@ -211,7 +211,10 @@ def get_itable_key(table_principal, user):
         raise TypeError("{} is not a User, is a {}".format(user, type(user)))
     global itables
     assert(table_principal in itables)
-    return itables[table_principal].get_key(user)
+    key = itables[table_principal].get_key(user)
+    if key is None:
+        print("user {} asked for {}'s key but does not own itable".format(user, table_principal))
+    return key
 
 def resolve(i, resolve_groups = True):
     """
