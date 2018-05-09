@@ -497,7 +497,10 @@ def _reload_principals():
     Reloads the set of known principals by reading and parsing /.users and
     /.groups, and the repopulating secfs.fs.usermap and secfs.fs.groupmap.
     """
-    print("reloading principals")
+    root = User(0)
+    table_key = secfs.tables.get_itable_key(root, root)
+    root = None
+    table_key = None
     def _read_file(fname):
         """
         Simple helper function for reading the pickled contents of a SecFS file
@@ -505,9 +508,9 @@ def _reload_principals():
         """
         return pickle.loads(
                 secfs.fs.get_inode(
-                    secfs.store.tree.find_under(secfs.fs.root_i, fname)
+                    secfs.store.tree.find_under(secfs.fs.root_i, fname, root)
                 )
-                .read()
+                .read(table_key)
             )
 
     # load group map

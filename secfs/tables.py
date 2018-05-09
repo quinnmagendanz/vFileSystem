@@ -28,6 +28,7 @@ def pre(refresh, user):
     Called before all user file system operations, right after we have obtained
     an exclusive server lock.
     """
+    print("---PRE", user)
     update_vsl()
     # refresh usermap and groupmap
     if refresh != None:
@@ -53,13 +54,12 @@ def post(push_vs):
         server.commit(active_user, updated_vs)
         last_vs_bytes = updated_vs.bytes()
 
-    active_user = None
-    print("")
+    print("---POST\n")
  
 def update_vs(user):
     if not user in itables:
         # was a read only operation for a new user, nothing to commit
-        print("No itable for {}, not committing vs\n".format(active_user))
+        print("No itable for {}, not committing vs\n".format(user))
         return None
 
     vs = vsl.get(user)
@@ -68,7 +68,7 @@ def update_vs(user):
         vs = create_new_vs(user)
         vsl[user] = vs
 
-    # Update ihandles for this vs
+    # Update ihandles and version numbers for this vs
     for p in itables:
         itable = itables[p]
         if itable.updated:
@@ -77,32 +77,30 @@ def update_vs(user):
                     user in secfs.fs.groupmap[p])
             if vs.set_ihandle(p, itable.save()):
                 vs.set_version(p, itable.version + 1)
-        elif vs.versions[p] < itable.version: 
+        elif vs.versions[p] < itable.version:
+            # make sure all version numbers are up-to-date
             vs.versions[p] = itables[p].version
             if p in vs.ihandles:
                 vs.set_ihandle(p, itable.ihandle)
-    date = vs.bytes()
+
     # Check if the versions structures have a total ordering
     for u1 in vsl:
         for u2 in vsl:
-           vs1 = vsl[u1]
-           vs2 = vsl[u2]
-           # ValidCheck is two bits 11.
-           validCheck = 3
-           for u3 in vsl:
-               if vs1.versions.get(u3, 0) > vs2.versions.get(u3, 0):
-                   # Right bit of validCheck is set to 0
-                   validCheck = validCheck & 2
-               elif vs1.versions.get(u3, 0) < vs2.versions.get(u3, 0):
-                   # Left bit of validCheck is set to 0
-                   validCheck = validCheck & 1
-           # If both the bits are 0 then there must be a version that is greater and another that is less than.
-           if validCheck == 0:
-               print("VSL IS NOT CONSISTENT")
-               print([user,vs.versions], [u1,vs1.versions], [u2,vs2.versions])
-               raise ValueError("Cannot Create a total ordering of Version Numbers")
+            vs1 = vsl[u1]
+            vs2 = vsl[u2]
+            gt = False
+            lt = False
+            for u3 in vsl:
+                gt = gt or vs1.versions.get(u3, 0) > vs2.versions.get(u3, 0)
+                lt = lt or vs1.versions.get(u3, 0) < vs2.versions.get(u3, 0)
+            if gt and lt:
+                print("VSL IS NOT CONSISTENT")
+                print([user, vs.versions], [u1, vs1.versions], [u2, vs2.versions])
+                raise ValueError("Cannot Create a total ordering of Version Numbers")
+
     private_key = secfs.crypto.load_private_key(user)
-    vs.signature = secfs.crypto.sign(private_key, date)
+    data = vs.bytes()
+    vs.signature = secfs.crypto.sign(private_key, data)
     return vs
 
 def update_vsl():
