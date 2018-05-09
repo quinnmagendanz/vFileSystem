@@ -16,10 +16,7 @@ def find_under(dir_i, name, read_as=None):
     if not isinstance(dir_i, I):
         raise TypeError("{} is not an I, is a {}".format(dir_i, type(dir_i)))
     
-    key = (
-        secfs.tables.get_itable_key(dir_i.p, read_as)
-        if read_as else None
-    )
+    key = secfs.tables.get_itable_key(dir_i.p, read_as) if read_as else None
     dr = Directory(dir_i, key)
     for f in dr.children:
         if f[0] == name:
@@ -41,6 +38,7 @@ class Directory:
         self.inode = secfs.fs.get_inode(i)
         if self.inode.kind != 0:
             raise TypeError("inode with ihash {} is not a directory".format(secfs.tables.resolve(i)))
+        self.encrypted = self.inode.encrypted
 
         cnt = self.inode.read(key)
         if len(cnt) != 0:
@@ -60,14 +58,15 @@ def add(dir_i, name, i, key=None):
         raise TypeError("{} is not an I, is a {}".format(i, type(i)))
 
     dr = Directory(dir_i, key)
+    if not dr.encrypted:
+        key = None
     for f in dr.children:
         if f[0] == name:
             raise KeyError("asked to add i {} to dir {} under name {}, but name already exists".format(i, dir_i, name))
 
     dr.children.append((name, i))
 
-    dr_bytes = secfs.crypto.encrypt_sym(key, dr.bytes()) if key else dr.bytes()
-    new_dhash = secfs.store.block.store(dr_bytes)
+    new_dhash = secfs.store.block.store(dr.bytes(), key)
     dr.inode.blocks = [new_dhash]
-    new_ihash = secfs.store.block.store(dr.inode.bytes())
+    new_ihash = secfs.store.block.store(dr.inode.bytes(), None) # inodes not encrypted
     return new_ihash
