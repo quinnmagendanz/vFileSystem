@@ -119,7 +119,9 @@ def _create(parent_i, name, create_as, create_for, isdir, encrypt):
     node.ex = isdir
 
     # store the newly created inode on the server
-    new_hash = secfs.store.block.store(node.bytes())
+    node_bytes = node.bytes()
+    # TODO(eforde): encrypt node_bytes - hard when itable keys don't exist yet
+    new_hash = secfs.store.block.store(node_bytes)
     # map the block to an i owned by create_for, created with credentials of create_as
     new_i = secfs.tables.modmap(create_as, I(create_for), new_hash)
     if isdir:
@@ -239,5 +241,6 @@ def link(link_as, i, parent_i, name):
         else:
             raise PermissionError("cannot create in user-writeable directory {0} as {1}".format(parent_i, link_as))
 
+    table_key = secfs.tables.get_itable_key(parent_i.p, link_as)
     parent_ihash = secfs.store.tree.add(parent_i, name, i)
     secfs.tables.modmap(link_as, parent_i, parent_ihash)
