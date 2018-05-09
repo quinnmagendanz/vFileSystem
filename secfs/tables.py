@@ -4,7 +4,7 @@
 # NOTE: an ihandle is the hash of a principal's itable, which holds that
 # principal's mapping from inumbers (the second part of an i) to inode hashes.
 
-from collections import defaultdict
+
 
 import pickle
 import secfs.store
@@ -77,10 +77,32 @@ def update_vs(user):
                     user in secfs.fs.groupmap[p])
             if vs.set_ihandle(p, itable.save()):
                 vs.set_version(p, itable.version + 1)
+        elif vs.versions[p] < itable.version: 
+            vs.versions[p] = itables[p].version
+            if p in vs.ihandles:
+                vs.set_ihandle(p, itable.ihandle)
     date = vs.bytes()
+    # Check if the versions structures have a total ordering
+    for u1 in vsl:
+        for u2 in vsl:
+           vs1 = vsl[u1]
+           vs2 = vsl[u2]
+           # ValidCheck is two bits 11.
+           validCheck = 3
+           for u3 in vsl:
+               if vs1.versions.get(u3, 0) > vs2.versions.get(u3, 0):
+                   # Right bit of validCheck is set to 0
+                   validCheck = validCheck & 2
+               elif vs1.versions.get(u3, 0) < vs2.versions.get(u3, 0):
+                   # Left bit of validCheck is set to 0
+                   validCheck = validCheck & 1
+           # If both the bits are 0 then there must be a version that is greater and another that is less than.
+           if validCheck == 0:
+               print("VSL IS NOT CONSISTENT")
+               print([user,vs.versions], [u1,vs1.versions], [u2,vs2.versions])
+               raise ValueError("Cannot Create a total ordering of Version Numbers")
     private_key = secfs.crypto.load_private_key(user)
     vs.signature = secfs.crypto.sign(private_key, date)
-    # TODO(eforde): verify vsl is a total order on <= operator (defined in paper)
     return vs
 
 def update_vsl():
