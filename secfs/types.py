@@ -113,6 +113,7 @@ class VersionStruct:
         self.principal = principal
         self.ihandles = {}                # principals -> i-handles
         self.versions = defaultdict(int)  # principals -> version number
+        #TODO(kmfoley): change defaultdict to something better 
         self.signature = ""               # signature of the version struct
 
     def __repr__(self):
