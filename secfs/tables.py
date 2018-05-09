@@ -161,7 +161,7 @@ class Itable:
         itable = Itable()
         itable.ihandle = ihandle
         itable.version = version
-        b = secfs.store.block.load(ihandle)
+        b = secfs.store.block.load(ihandle, None) # itable should never be encrypted
         if b == None:
             # TODO(eforde): this may happen if we start deleting unused ihandles on the server?
             raise KeyError("No block for ihandle {}".format(_ihandle))
@@ -210,7 +210,7 @@ class Itable:
         return pickle.dumps(rep)
 
     def save(self):
-        new_ihandle = secfs.store.block.store(self.bytes())
+        new_ihandle = secfs.store.block.store(self.bytes(), None) # itables not encrypted
         self.ihandle = new_ihandle
         self.updated = True
         return new_ihandle

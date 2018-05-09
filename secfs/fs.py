@@ -48,7 +48,7 @@ def init(owner, users, groups):
     node.ctime = time.time()
     node.mtime = node.ctime
 
-    ihash = secfs.store.block.store(node.bytes())
+    ihash = secfs.store.block.store(node.bytes(), None)  # inodes not encrypted
     root_i = secfs.tables.modmap(owner, I(owner), ihash)
     if root_i == None:
         raise RuntimeError
@@ -73,9 +73,9 @@ def init(owner, users, groups):
         node.size = len(bts)
         node.mtime = node.ctime
         node.ctime = time.time()
-        node.blocks = [secfs.store.block.store(bts)]
+        node.blocks = [secfs.store.block.store(bts, None)] # don't encrypt init
 
-        ihash = secfs.store.block.store(node.bytes())
+        ihash = secfs.store.block.store(node.bytes(), None) # inodes not encrypted
         i = secfs.tables.modmap(owner, I(owner), ihash)
         link(owner, i, root_i, fn)
 
@@ -119,14 +119,12 @@ def _create(parent_i, name, create_as, create_for, isdir, encrypt):
     node.ex = isdir
 
     # store the newly created inode on the server
-    node_bytes = node.bytes()
-    # TODO(eforde): encrypt node_bytes - hard when itable keys don't exist yet
-    new_hash = secfs.store.block.store(node_bytes)
+    new_hash = secfs.store.block.store(node.bytes(), None)  # inodes not encrypted
     # map the block to an i owned by create_for, created with credentials of create_as
     new_i = secfs.tables.modmap(create_as, I(create_for), new_hash)
     if isdir:
         # create . and .. if this is a directory
-        table_key = secfs.tables.get_itable_key(create_for, create_as) if node.encrypted else None
+        table_key = secfs.tables.get_itable_key(create_for, create_as)
         new_ihash = secfs.store.tree.add(new_i, b'.', new_i, table_key)
         secfs.tables.modmap(create_as, new_i, new_ihash)
         new_ihash = secfs.store.tree.add(new_i, b'..', parent_i, table_key)
@@ -167,8 +165,7 @@ def read(read_as, i, off, size):
             raise PermissionError("cannot read from user-readable file {0} as {1}".format(i, read_as))
 
     node = get_inode(i)
-    table_key = secfs.tables.get_itable_key(i.p, read_as) if node.encrypted else None
-
+    table_key = secfs.tables.get_itable_key(i.p, read_as)
     return node.read(table_key)[off:off+size]
 
 def write(write_as, i, off, buf):
@@ -187,7 +184,7 @@ def write(write_as, i, off, buf):
             raise PermissionError("cannot write to user-owned file {0} as {1}".format(i, write_as))
 
     node = get_inode(i)
-    table_key = secfs.tables.get_itable_key(i.p, write_as) if node.encrypted else None
+    table_key = secfs.tables.get_itable_key(i.p, write_as)
 
     # TODO: this is obviously stupid -- should not get rid of blocks that haven't changed
     bts = node.read(table_key)
@@ -197,16 +194,14 @@ def write(write_as, i, off, buf):
         bts = bts[:off] + buf
     else:
         bts = bts[:off] + buf + bts[off+len(buf):]
-    if node.encrypted:
-        bts = secfs.crypto.encrypt_sym(table_key, bts)
 
     # update the inode
-    node.blocks = [secfs.store.block.store(bts)]
+    node.blocks = [secfs.store.block.store(bts, table_key if node.encrypted else None)]
     node.mtime = time.time()
     node.size = len(bts)
 
     # put new hash in tree
-    new_hash = secfs.store.block.store(node.bytes())
+    new_hash = secfs.store.block.store(node.bytes(), None)  # inodes not encrypted
     secfs.tables.modmap(write_as, i, new_hash)
 
     return len(buf)
@@ -242,5 +237,5 @@ def link(link_as, i, parent_i, name):
             raise PermissionError("cannot create in user-writeable directory {0} as {1}".format(parent_i, link_as))
 
     table_key = secfs.tables.get_itable_key(parent_i.p, link_as)
-    parent_ihash = secfs.store.tree.add(parent_i, name, i)
+    parent_ihash = secfs.store.tree.add(parent_i, name, i) # TODO(eforde): key here for encrypted dir
     secfs.tables.modmap(link_as, parent_i, parent_ihash)

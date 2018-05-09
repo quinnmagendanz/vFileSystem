@@ -487,7 +487,7 @@ class SecFS(llfuse.Operations):
         # as failure by touch et. al.
 
         # put new hash in tree
-        new_hash = secfs.store.block.store(node.bytes())
+        new_hash = secfs.store.block.store(node.bytes(), None)  # inodes not encrypted
         secfs.tables.modmap(who, i, new_hash)
         return self._post_and_getattr(i)
 
