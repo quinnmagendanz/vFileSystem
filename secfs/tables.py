@@ -99,7 +99,7 @@ def update_vs(user):
                 print([user, vs.versions], [u1, vs1.versions], [u2, vs2.versions])
                 raise ValueError("Cannot Create a total ordering of Version Numbers")
 
-    private_key = secfs.crypto.load_private_key(user)
+    private_key = secfs.crypto.keys[user]
     data = vs.bytes()
     vs.signature = secfs.crypto.sign(private_key, data)
     return vs
@@ -227,7 +227,7 @@ class Itable:
         """
         if not user in self.keys:
             return None
-        private_key = secfs.crypto.load_private_key(user)
+        private_key = secfs.crypto.keys[user]
         return secfs.crypto.decrypt(private_key, self.keys[user])
 
 def get_itable_key(table_principal, user):

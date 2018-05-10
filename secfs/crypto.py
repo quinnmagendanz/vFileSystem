@@ -59,17 +59,6 @@ def verify(public_key, signature, data):
     except InvalidSignature:
         return False
 
-def load_private_key(user):
-    assert(user.is_user())
-    filename = "./user-{}-key.pem".format(user._uid)
-    with open(filename, "rb") as key_file:
-        private_key = serialization.load_pem_private_key(
-            key_file.read(),
-            password=None,
-            backend=default_backend()
-        )
-    return private_key
-
 def generate_sym_key():
     return Fernet.generate_key()
 
