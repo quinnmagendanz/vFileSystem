@@ -237,5 +237,5 @@ def link(link_as, i, parent_i, name):
             raise PermissionError("cannot create in user-writeable directory {0} as {1}".format(parent_i, link_as))
 
     table_key = secfs.tables.get_itable_key(parent_i.p, link_as)
-    parent_ihash = secfs.store.tree.add(parent_i, name, i) # TODO(eforde): key here for encrypted dir
+    parent_ihash = secfs.store.tree.add(parent_i, name, i, table_key)
     secfs.tables.modmap(link_as, parent_i, parent_ihash)
