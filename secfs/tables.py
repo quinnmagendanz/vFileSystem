@@ -30,12 +30,13 @@ def pre(refresh, user):
     """
     print("---PRE", user)
     update_vsl()
-    # refresh usermap and groupmap
-    if refresh != None:
-        refresh()
     assert(user.is_user())
     global active_user
     active_user = user
+
+    # refresh usermap and groupmap
+    if refresh != None:
+        refresh()
 
 def post(push_vs):
     if not push_vs:
@@ -113,7 +114,13 @@ def update_vsl():
     # populate itables
     for user in vsl:
         vs = vsl[user]
-        assert(secfs.crypto.verify(secfs.fs.usermap[user], vs.signature, vs.bytes()))
+        if user in secfs.fs.usermap:
+            public_key = secfs.fs.usermap[user]
+        else:
+            print("User {} not in usermap yet, probably during init... {}".format(user, secfs.fs.usermap))
+            public_key = secfs.crypto.keys[user].public_key()
+
+        assert(secfs.crypto.verify(public_key, vs.signature, vs.bytes()))
         for principal in vs.ihandles:
             ihandle = vs.ihandles[principal]
             version = vs.versions[principal]
@@ -127,7 +134,6 @@ def update_vsl():
     print("    with itables", itables)
     # not sure how to assert this since another client can act on behalf of same user
     # assert((last_vs_bytes is None or vsl.contains_old_vs(last_vs_bytes)) and "VSL should contain last VS")
-    # TODO(eforde): httpd should be able to create shared directories
 
 def create_new_vs(principal):
     vs = VersionStruct(principal)
