@@ -368,3 +368,14 @@ def modmap(mod_as, i, ihash):
     t.mapping[i.n] = ihash # for groups, ihash is an i
     t.save()
     return i
+
+def try_create_table(create_as, i):
+    if i.p not in itables:
+        if i.allocated():
+            # this was unexpected;
+            # user did not have an itable, but an inumber was given
+            raise ReferenceError("itable not available")
+        t = Itable.create(i.p)
+        itables[i.p] = t
+        print("no current list for principal", i.p, "; creating empty table", t.mapping)
+ 

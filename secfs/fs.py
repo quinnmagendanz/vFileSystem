@@ -111,9 +111,10 @@ def _create(parent_i, name, create_as, create_for, isdir, encrypt):
         else:
             raise PermissionError("cannot create in user-writeable directory {0} as {1}".format(parent_i, create_as))
 
-    # TODO(eforde): encrypt if parent directory is encrypted
-    # encrypt = encrypt or parent_i.encrypted
+    i = I(create_for)
+    secfs.tables.try_create_table(create_as, i)
 
+    table_key = secfs.tables.get_itable_key(create_for, create_as)
     node = Inode()
     node.encrypted = 1 if encrypt else 0
     node.ctime = time.time()
@@ -123,12 +124,11 @@ def _create(parent_i, name, create_as, create_for, isdir, encrypt):
 
     # store the newly created inode on the server
     #TODO(kmfoley): Get key before modmap
-    new_hash = node.save() 
+    new_hash = node.save(table_key)
     # map the block to an i owned by create_for, created with credentials of create_as
-    new_i = secfs.tables.modmap(create_as, I(create_for), new_hash)
+    new_i = secfs.tables.modmap(create_as, i, new_hash)
     if isdir:
         # create . and .. if this is a directory
-        table_key = secfs.tables.get_itable_key(create_for, create_as)
         new_ihash = secfs.store.tree.add(new_i, b'.', new_i, table_key)
         secfs.tables.modmap(create_as, new_i, new_ihash)
         new_ihash = secfs.store.tree.add(new_i, b'..', parent_i, table_key)
