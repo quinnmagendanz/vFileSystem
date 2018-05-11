@@ -70,3 +70,27 @@ def add(dir_i, name, i, key=None):
     dr.inode.blocks = [new_dhash]
     new_ihash = secfs.store.block.store(dr.inode.bytes(), None) # inodes not encrypted
     return new_ihash
+
+def remove(dir_i, name, key=None):
+    """
+    Removes name from the directory
+    """
+    if not isinstance(dir_i, I):
+        raise TypeError("{} is not an I, is a {}".format(dir_i, type(dir_i)))
+
+    dr = Directory(dir_i, key)
+    if not dr.encrypted:
+        key = None
+
+    for f in range(len(dr.children)):
+        if dr.children[f][0] == name:
+             print("Removed child {} from dir{} children".format(name, dir_i))
+             del dr.children[f]
+             break
+    new_dhash = secfs.store.block.store(dr.bytes(), key)
+    dr.inode.blocks = [new_dhash]
+    new_ihash = secfs.store.block.store(dr.inode.bytes(), None) # inodes not encrypted
+ 
+    for c in dr.children:
+        print("Remaining child {}".format(c[0]))
+    return new_ihash

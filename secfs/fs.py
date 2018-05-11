@@ -88,6 +88,7 @@ def _create(parent_i, name, create_as, create_for, isdir, encrypt):
     using the credentials of create_as. This distinction is necessary as a user
     principal is needed for the final i when creating a file as a group.
     """
+
     if not isinstance(parent_i, I):
         raise TypeError("{} is not an I, is a {}".format(parent_i, type(parent_i)))
     if not isinstance(create_as, User):
@@ -206,13 +207,40 @@ def write(write_as, i, off, buf):
 
     return len(buf)
 
+def unlink(parent_inode, i, name, remove_as):
+    """
+    Unlink removes the given file from the parent_inode
+    """
+    if not isinstance(parent_inode, I):
+        raise TypeError("{} is not an I, is a {}".format(parent_inode, type(parent_inode)))
+    if not isinstance(remove_as, User):
+        raise TypeError("{} is not a User, is a {}".format(remove_as, type(remove_as)))
+
+    assert remove_as.is_user() # only users can create
+    if not secfs.access.can_write(remove_as, i):
+        if i.p.is_group():
+            raise PermissionError("cannot remove group-owned file {0} as {1}; user is not in group".format(i, remove_as))
+        else:
+            raise PermissionError("cannot remove user-owned file {0} as {1}".format(i, remove_as))
+ 
+    table_key = secfs.tables.get_itable_key(i.p, remove_as)
+
+    new_ihash = secfs.store.tree.remove(parent_inode, name, table_key)
+    secfs.tables.modmap(remove_as, parent_inode, new_ihash)
+    #TODO(magendanz) remove filr and inode from server using secfs.store.blocks
+    secfs.tables.remove(i)
+ 
+
+def rmdir(parent_inode, i, name, ctx):
+    return
+
 def readdir(i, off, read_as):
     """
     Return a list of is in the directory at i.
     Each returned list item is a tuple of an i and an index. The index can be
     used to request a suffix of the list at a later time.
     """
-    # TODO(eforde): encrypted directories?
+    
     table_key = secfs.tables.get_itable_key(i.p, read_as)
     dr = Directory(i, table_key)
     if dr == None:

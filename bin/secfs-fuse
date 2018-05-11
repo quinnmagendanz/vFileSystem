@@ -300,6 +300,7 @@ class SecFS(llfuse.Operations):
             raise llfuse.FUSEError(errno.ENOTDIR)
 
         try:
+            print("Readdir with fh {}".format(fhs[fh][0]))
             for e, o in secfs.fs.readdir(fhs[fh][0], off, user):
                 print (e[0].decode('utf-8'), e[1], o)
                 yield (e[0], _getattr(e[1]), o)
@@ -435,6 +436,45 @@ class SecFS(llfuse.Operations):
             ret = secfs.fs.write(fh[1], fh[0], off, buf)
             self._post()
             return ret
+        except PermissionError as e:
+            print("Illegal access:", e)
+            self._post()
+            raise llfuse.FUSEError(errno.EACCES)
+        except:
+            self._post()
+            raise
+
+    def unlink(self, parent_inode, name, ctx):
+        print("REMOVE FILE", parent_inode, name, ctx)
+
+        try:
+            self._pre(User(ctx.uid))
+            i = secfs.store.tree.find_under(inodes[parent_inode], name, User(ctx.uid)) 
+            secfs.fs.unlink(inodes[parent_inode], i, name, User(ctx.uid))
+            for j in range(len(fhs)):
+                if fhs[j][0] == i:
+                    print("Removed {} from fhs".format(i))
+                    del fhs[j]
+                    break
+            for k in fhs:
+                print("Remaining FH {}".format(k))
+            self._post()
+        except PermissionError as e:
+            print("Illegal access:", e)
+            self._post()
+            raise llfuse.FUSEError(errno.EACCES)
+        except:
+            self._post()
+            raise
+
+    def rmdir(self, parent_inode, name, ctx):
+        print("REMOVE DIR", parent_inode, name, ctx)
+
+        try:
+            self._pre(User(ctx.uid))
+            i = secfs.store.tree.find_under(parent_inode, name, User(ctx.uid))
+            secfs.fs.rmdir(inodes[parent_inode], i, name, User(ctx.uid))
+            self._post()
         except PermissionError as e:
             print("Illegal access:", e)
             self._post()

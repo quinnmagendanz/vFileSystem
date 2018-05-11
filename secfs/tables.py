@@ -368,3 +368,17 @@ def modmap(mod_as, i, ihash):
     t.mapping[i.n] = ihash # for groups, ihash is an i
     t.save()
     return i
+
+def remove(i):
+    """
+    Removes the given i from its itable and its mapping
+    """
+    assert(i.p in itables)
+    t = itables[i.p]
+    assert(i.n in t.mapping)
+    print("Removing child i:{} from table mapping".format(i))
+    del t.mapping[i.n]
+    t.save()
+    for n in t.mapping:
+        print("Remaining child: {}".format(n))
+    
