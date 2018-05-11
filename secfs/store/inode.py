@@ -1,8 +1,12 @@
 import pickle
 import secfs.store.block
 import secfs.crypto
+from secfs.types import I
 
 class Inode:
+
+    ihash_encrypted = {}  #ihash -> encrypted(bool)
+
     def __init__(self):
         self.size = 0
         self.kind = 0 # 0 is dir, 1 is file
@@ -14,17 +18,28 @@ class Inode:
         # TODO(eforde): perhaps take in key of current user when inodes are initialized
         # then can just try to decrypt encrypted things with that key
 
-    def load(ihash):
+    def load(ihash, key=None):
         """
         Loads all meta information about an inode given its ihandle.
         """
-        d = secfs.store.block.load(ihash, None)  # inodes shouldn't be encrypted
+        if Inode.ihash_encrypted[ihash] and not key:
+            raise PermissionError("No key supplied to load encrypted inode {}".format(ihash))
+        d = secfs.store.block.load(ihash, key if Inode.ihash_encrypted[ihash] else None)  # inodes shouldn't be encrypted
         if d == None:
             return None
 
         n = Inode()
         n.__dict__.update(pickle.loads(d))
         return n
+
+    def save(self, key=None):
+        bts = self.bytes()
+        if self.encrypted and not key:
+            raise PermissionError("No key supplied to save encrypted inode {}".format(self))
+        ihash = secfs.store.block.store(bts,key if self.encrypted else None)
+        Inode.ihash_encrypted[ihash] = self.encrypted
+        return ihash
+        
 
     def read(self, key=None):
         """

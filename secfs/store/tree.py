@@ -35,7 +35,7 @@ class Directory:
         self.inode = None
         self.children = []
 
-        self.inode = secfs.fs.get_inode(i)
+        self.inode = secfs.fs.get_inode(i, key)
         if self.inode.kind != 0:
             raise TypeError("inode with ihash {} is not a directory".format(secfs.tables.resolve(i)))
         self.encrypted = self.inode.encrypted
@@ -68,5 +68,5 @@ def add(dir_i, name, i, key=None):
 
     new_dhash = secfs.store.block.store(dr.bytes(), key)
     dr.inode.blocks = [new_dhash]
-    new_ihash = secfs.store.block.store(dr.inode.bytes(), None) # inodes not encrypted
+    new_ihash = dr.inode.save(key) 
     return new_ihash

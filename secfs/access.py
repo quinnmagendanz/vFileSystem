@@ -38,5 +38,6 @@ def can_execute(user, i):
         return False
 
     # check x bits
-    node = secfs.fs.get_inode(i)
+    table_key = secfs.tables.get_itable_key(i.p, user)
+    node = secfs.fs.get_inode(i, table_key)
     return node.ex

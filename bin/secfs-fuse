@@ -131,11 +131,11 @@ class SecFS(llfuse.Operations):
         secfs.tables.post(push_vs)
         self.server.unlock()
 
-    def _post_and_getattr(self, i):
+    def _post_and_getattr(self, i, user):
         """
         Calls getattr on i, then calls self._post, then returns the getattr.
         """
-        attr = _getattr(i)
+        attr = _getattr(i,user)
         self._post()
         return attr
 
@@ -267,13 +267,13 @@ class SecFS(llfuse.Operations):
             self._post()
             raise llfuse.FUSEError(errno.ENOENT)
 
-        return self._post_and_getattr(i)
+        return self._post_and_getattr(i,user)
 
     def getattr(self, inode, ctx):
         print("GETATTR", inode)
 
         self._pre(User(ctx.uid))
-        return self._post_and_getattr(inodes[inode])
+        return self._post_and_getattr(inodes[inode],User(ctx.uid))
 
     def opendir(self, inode, ctx):
         print("OPENDIR", inode)
@@ -281,7 +281,8 @@ class SecFS(llfuse.Operations):
         self._pre(User(ctx.uid))
 
         i = inodes[inode]
-        node = secfs.fs.get_inode(i)
+        table_key = secfs.tables.get_itable_key(i.p, User(ctx.uid))
+        node = secfs.fs.get_inode(i, table_key)
         if node.kind != 0:
             raise llfuse.FUSEError(errno.ENOTDIR)
 
@@ -295,14 +296,16 @@ class SecFS(llfuse.Operations):
         user = fhs[fh][1]
         self._pre(user)
 
-        node = secfs.fs.get_inode(fhs[fh][0])
-        if node.kind != 0:
-            raise llfuse.FUSEError(errno.ENOTDIR)
+        #TODO(kmfoley): Include this test
+        #table_key = secfs.tables.get_itable_key(i.p, user) 
+        #node = secfs.fs.get_inode(fhs[fh][0], table_key)
+        #if node.kind != 0:
+        #    raise llfuse.FUSEError(errno.ENOTDIR)
 
         try:
             for e, o in secfs.fs.readdir(fhs[fh][0], off, user):
                 print (e[0].decode('utf-8'), e[1], o)
-                yield (e[0], _getattr(e[1]), o)
+                yield (e[0], _getattr(e[1],user), o)
         except PermissionError as e:
             print("Illegal access:", e)
             self._post()
@@ -324,7 +327,8 @@ class SecFS(llfuse.Operations):
         self._pre(User(ctx.uid))
 
         i = inodes[inode]
-        node = secfs.fs.get_inode(i)
+        table_key = secfs.tables.get_itable_key(i.p, User(ctx.uid)) 
+        node = secfs.fs.get_inode(i, table_key)
         if node.kind != 1:
             raise llfuse.FUSEError(errno.EISDIR)
 
@@ -389,7 +393,7 @@ class SecFS(llfuse.Operations):
 
         try:
             i = secfs.fs.mkdir(inodes[parent_inode], name, User(ctx.uid), who, encrypt)
-            return self._post_and_getattr(i)
+            return self._post_and_getattr(i,User(ctx.uid))
         except PermissionError as e:
             print("Illegal access:", e)
             self._post()
@@ -415,7 +419,7 @@ class SecFS(llfuse.Operations):
 
         try:
             i = secfs.fs.create(inodes[parent_inode], name, User(ctx.uid), who, encrypt)
-            ret = (new_fh(i, ctx.uid), _getattr(i))
+            ret = (new_fh(i, ctx.uid), _getattr(i,User(ctx.uid)))
             self._post()
             return ret
         except PermissionError as e:
@@ -462,7 +466,8 @@ class SecFS(llfuse.Operations):
                 print("cannot setattr on user-owned file {0} as {1}".format(i, who))
             raise llfuse.FUSEError(errno.EACCES)
 
-        node = secfs.fs.get_inode(i)
+        table_key = secfs.tables.get_itable_key(i.p, User(ctx.uid)) 
+        node = secfs.fs.get_inode(i, table_key)
         if fields.update_mode:
             node.ex = (attr.st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)) != 0
             # TODO: warn if trying to change other bits -- has no effect.
@@ -489,7 +494,7 @@ class SecFS(llfuse.Operations):
         # put new hash in tree
         new_hash = secfs.store.block.store(node.bytes(), None)  # inodes not encrypted
         secfs.tables.modmap(who, i, new_hash)
-        return self._post_and_getattr(i)
+        return self._post_and_getattr(i,User(ctx.uid))
 
 
 def _reload_principals():
@@ -519,7 +524,7 @@ def _reload_principals():
     for p, pem in _read_file(b".users").items():
         secfs.fs.usermap[p] = load_pem_public_key(pem, backend=default_backend())
 
-def _getattr(i):
+def _getattr(i, user):
     """
     _getattr produces an llfuse.EntryAttributes object with information about
     filat at the given i, including FUSE inode number, size, modification and
@@ -530,7 +535,8 @@ def _getattr(i):
     if i not in rinodes:
         alloc_inode(i)
 
-    n = secfs.fs.get_inode(i)
+    table_key = secfs.tables.get_itable_key(i.p, user) 
+    n = secfs.fs.get_inode(i, table_key)
 
     # Fill entry with known attributes
     entry = llfuse.EntryAttributes()
