@@ -51,6 +51,11 @@ expect "sudo mkdir root-only" '^$' || fail "couldn't make root directory"
 cant "delete root dir using user" "rm -r root-only"
 expect "sudo rm -r root-only" '^$' || fail "couldn't remove root directory"
 
+# recursive rm
+expect "sudo mkdir root-only" "echo x | sudo tee root-only/root-file" "sudo rm -r root-only" '^$' || fail "couldn't recursively delete populated directory as root"
+expect "sudo sh -c 'umask 0200; sg users \"mkdir shared\"'" '^$' || fail "couldn't create group-owned directory"
+cant "delete directory with unowned contents" "mkdir shared/user-dir" "echo b | sudo tee root-subfile" "rm -r shared/user-dir"
+
 # shared rm empty dir
 expect "sudo sh -c 'umask 0200; sg users \"mkdir shared\"'" '^$' || fail "couldn't create group-owned directory"
 expect "rm -r shared" '^$' || fail "user could not remove shared directory"

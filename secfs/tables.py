@@ -379,6 +379,4 @@ def remove(i):
     print("Removing child i:{} from table mapping".format(i))
     del t.mapping[i.n]
     t.save()
-    for n in t.mapping:
-        print("Remaining child: {}".format(n))
     

@@ -451,13 +451,10 @@ class SecFS(llfuse.Operations):
             self._pre(User(ctx.uid))
             i = secfs.store.tree.find_under(inodes[parent_inode], name, User(ctx.uid)) 
             secfs.fs.unlink(inodes[parent_inode], i, name, User(ctx.uid))
-            for j in range(len(fhs)):
+            for j in fhs:
                 if fhs[j][0] == i:
-                    print("Removed {} from fhs".format(i))
-                    del fhs[j]
                     break
-            for k in fhs:
-                print("Remaining FH {}".format(k))
+            del fhs[j]
             self._post()
         except PermissionError as e:
             print("Illegal access:", e)
@@ -472,8 +469,14 @@ class SecFS(llfuse.Operations):
 
         try:
             self._pre(User(ctx.uid))
-            i = secfs.store.tree.find_under(parent_inode, name, User(ctx.uid))
-            secfs.fs.rmdir(inodes[parent_inode], i, name, User(ctx.uid))
+            i = secfs.store.tree.find_under(inodes[parent_inode], name, User(ctx.uid)) 
+            sub_is = secfs.fs.rmdir(inodes[parent_inode], i, name, User(ctx.uid))
+            to_delete = []
+            for j in fhs:
+                if fhs[j][0] in sub_is:
+                    to_delete.append(j)
+            for j in to_delete:
+                del fhs[j]
             self._post()
         except PermissionError as e:
             print("Illegal access:", e)
@@ -482,6 +485,7 @@ class SecFS(llfuse.Operations):
         except:
             self._post()
             raise
+
 
     def setattr(self, inode, attr, fields, fh, ctx):
         if fields.update_uid:

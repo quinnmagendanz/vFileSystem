@@ -91,6 +91,4 @@ def remove(dir_i, name, key=None):
     dr.inode.blocks = [new_dhash]
     new_ihash = secfs.store.block.store(dr.inode.bytes(), None) # inodes not encrypted
  
-    for c in dr.children:
-        print("Remaining child {}".format(c[0]))
     return new_ihash
