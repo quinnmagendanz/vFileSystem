@@ -311,7 +311,8 @@ def modmap(mod_as, i, ihash):
 
     if mod_as != i.p:
         print("trying to mod object for {} through {}".format(i.p, mod_as))
-        assert i.p.is_group() and mod_as.is_user() # if not for self, then must be for group
+        if not (i.p.is_group() and mod_as.is_user()): # if not for self, then must be for group
+            raise PermissionError("cannot modmap for {} as {}".format(i.p, mod_as)) 
 
         real_i = resolve(i, False)
         if isinstance(real_i, I) and real_i.p == mod_as:

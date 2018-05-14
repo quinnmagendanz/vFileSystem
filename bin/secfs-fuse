@@ -536,6 +536,23 @@ class SecFS(llfuse.Operations):
         return self._post_and_getattr(i)
 
 
+    def rename(self, parent_inode_old, name_old, parent_inode_new, name_new, ctx):
+        print("RENAME", parent_inode_old, name_old, parent_inode_new, name_new, ctx)
+        parent_old = inodes[parent_inode_old]
+        parent_new = inodes[parent_inode_new]
+        try:
+            self._pre(User(ctx.uid))
+            i = secfs.fs.rename(parent_old, name_old, parent_new, name_new, User(ctx.uid))
+            self._post()
+        except PermissionError as e:
+            print("Illegal access:", e)
+            self._post()
+            raise llfuse.FUSEError(errno.EACCES)
+        except:
+            self._post()
+            raise
+
+
 def _reload_principals():
     """
     Reloads the set of known principals by reading and parsing /.users and

@@ -207,6 +207,35 @@ def write(write_as, i, off, buf):
 
     return len(buf)
 
+def rename(parent_i_old, name_old, parent_i_new, name_new, rename_as):
+    """
+    Rename renames the given file in parent_i_old into parent_i_new as name_new
+    """
+    if not isinstance(parent_i_old, I):
+        raise TypeError("{} is not an I, is a {}".format(parent_i_old, type(parent_i_old)))
+    if not isinstance(parent_i_new, I):
+        raise TypeError("{} is not an I, is a {}".format(parent_i_new, type(parent_i_new)))
+    if not isinstance(rename_as, User):
+        raise TypeError("{} is not a User, is a {}".format(rename_as, type(rename_as)))
+
+    if not secfs.access.can_write(rename_as, parent_i_new):
+        raise PermissionError("no permission to rename {} to {} in new directory {}".format(name_old, name_new, parent_i_new))
+
+    # Fetch i we're moving
+    i = secfs.store.tree.find_under(parent_i_old, name_old, rename_as)
+
+    # Remove i from old directory
+    table_key = secfs.tables.get_itable_key(parent_i_old.p, rename_as)
+    new_ihash = secfs.store.tree.remove(parent_i_old, name_old, table_key)
+    secfs.tables.modmap(rename_as, parent_i_old, new_ihash)
+
+    # Add i to new directory
+    table_key = secfs.tables.get_itable_key(parent_i_new.p, rename_as)
+    new_ihash = secfs.store.tree.add(parent_i_new, name_new, i, table_key)
+    secfs.tables.modmap(rename_as, parent_i_new, new_ihash)
+
+    return i
+
 def unlink(parent_i, i, name, remove_as):
     """
     Unlink removes the given file from the parent_inode
