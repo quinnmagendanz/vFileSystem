@@ -26,7 +26,7 @@ def get_inode(i, key=None):
     """
     ihash = secfs.tables.resolve(i)
     if ihash == None:
-        raise LookupError("asked to resolve i {}, but i does not exist".format(i))
+        raise PermissionError("asked to resolve i {}, but None key provided".format(i))
 
     return Inode.load(ihash, key)
 

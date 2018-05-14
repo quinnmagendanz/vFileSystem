@@ -263,11 +263,13 @@ def resolve(i, resolve_groups = True):
 
     if not i.allocated():
         # someone is trying to look up an i that has not yet been allocated
+        print("Unallocated i {}".format(i))
         return None
 
     global itables
     if principal not in itables:
         # User does not yet have an itable
+        print("No itable made for principle {}".format(i.p))
         return None 
 
     t = itables[principal]
@@ -285,6 +287,8 @@ def resolve(i, resolve_groups = True):
         # follow the indirection
         return resolve(t.mapping[i.n])
 
+    if t.mapping[i.n] is None:
+        print("Resolving to None for other reason. i {}, mapping {}".format(i, t.mapping))
     return t.mapping[i.n]
 
 def modmap(mod_as, i, ihash):

@@ -325,16 +325,20 @@ class SecFS(llfuse.Operations):
         llfuse.invalidate_inode(inode)
 
         self._pre(User(ctx.uid))
+        try:
+            i = inodes[inode]
+            table_key = secfs.tables.get_itable_key(i.p, User(ctx.uid))
+            node = secfs.fs.get_inode(i, table_key)
+            if node.kind != 1:
+                raise llfuse.FUSEError(errno.EISDIR)
 
-        i = inodes[inode]
-        table_key = secfs.tables.get_itable_key(i.p, User(ctx.uid)) 
-        node = secfs.fs.get_inode(i, table_key)
-        if node.kind != 1:
-            raise llfuse.FUSEError(errno.EISDIR)
-
-        ret = new_fh(i, ctx.uid)
-        self._post()
-        return ret
+            ret = new_fh(i, ctx.uid)
+            self._post()
+            return ret
+        except PermissionError as e:
+            print("Illegal access:", e)
+            self._post()
+            raise llfuse.FUSEError(errno.EACCES)
 
     def access(self, inode, mode, ctx):
         print("ACCESS", inode, mode, ctx.uid, ctx.gid, ctx.umask)
