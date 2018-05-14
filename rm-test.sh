@@ -39,29 +39,32 @@ sudo rm -f root.pub user-*-key.pem
 client
 
 
-section "rm"
-# root single-user write
+section "rm sudo files"
+# root rm file
 expect "echo x | sudo tee root-file" "sudo cat root-file" '^x$' || fail "couldn't read back root created file"
 expect "echo x | sudo tee -a root-file" "sudo cat root-file" '^x\nx$' || fail "couldn't read back root appended file"
 cant "delete root file using user" "rm root-file"
-expect "sudo rm root-file" '^$' || fail "couldn't remove file"
+expect "sudo rm root-file" "sudo ls" '^$' || fail "couldn't remove file"
 
+section "rm -r sudo dirs"
 # root single-user rm empty dir
 expect "sudo mkdir root-only" '^$' || fail "couldn't make root directory"
 cant "delete root dir using user" "rm -r root-only"
 expect "sudo rm -r root-only" '^$' || fail "couldn't remove root directory"
-
 # recursive rm
 expect "sudo mkdir root-only" "echo x | sudo tee root-only/root-file" "sudo rm -r root-only" '^$' || fail "couldn't recursively delete populated directory as root"
+
+section "rm -r shared dir"
+# shared operations
 expect "sudo sh -c 'umask 0200; sg users \"mkdir shared\"'" '^$' || fail "couldn't create group-owned directory"
-cant "delete directory with unowned contents" "mkdir shared/user-dir" "echo b | sudo tee root-subfile" "rm -r shared/user-dir"
+user=$(id -un)
+expect "echo b | tee shared/user-file" "cat shared/user-file" '^b$' || fail "couldn't create user file in shared directory"
+expect "mkdir shared/user-only" '^$' || fail "couldn't make user directory in shared dir"
+cant "have root delete folder with unowned contents" "sudo rm -r shared/"
 
-# shared rm empty dir
-expect "sudo sh -c 'umask 0200; sg users \"mkdir shared\"'" '^$' || fail "couldn't create group-owned directory"
-expect "rm -r shared" '^$' || fail "user could not remove shared directory"
-
-# deleting directory with contents
-
+# Only use this test case if you assume you can delete a file you can write to 
+#   in a directory that you cannot write to
+# expect "rm -r shared/" "sudo ls"
 
 cleanup
 

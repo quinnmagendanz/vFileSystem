@@ -246,18 +246,21 @@ def rmdir(parent_i, i, name, remove_as):
             raise PermissionError("cannot remove group-owned file {0} as {1}; user is not in group".format(i, remove_as))
         else:
             raise PermissionError("cannot remove user-owned file {0} as {1}".format(i, remove_as))
- 
+    print("Permissions: {} can edit {} owned file".format(remove_as, i))
+
     table_key = secfs.tables.get_itable_key(i.p, remove_as)
 
     # recursive rm of all subfiles/subdirs
     inode = get_inode(i)
     sub_is = []
+    # pass to unlink if not dir
     if inode.kind == 0:
         dr = Directory(i, table_key)
         subfiles = [(sub_name, sub_i) for sub_name, sub_i in dr.children if ((sub_name != b'.') and (sub_name != b'..'))]
         print("Subfiles to try and rm {}".format(subfiles))
         # confirm that can delete all subfiles/subdirs before starting to delete
         for child_name, child_i in subfiles:
+            print("Checking permissions. {} can edit {}".format(remove_as, child_i))
             if not secfs.access.can_write(remove_as, child_i):
                 raise PermissionError("cannot remove group-owned file {0} as {1}; user is not in group".format(child_i, remove_as))
 
@@ -266,12 +269,17 @@ def rmdir(parent_i, i, name, remove_as):
             sub_is += rmdir(i, child_i, child_name, remove_as)
         # TODO(magendanz) do we need to delete . and ..?
 
-    new_ihash = secfs.store.tree.remove(parent_i, name, table_key)
-    secfs.tables.modmap(remove_as, parent_i, new_ihash)
-    #TODO(magendanz) remove filr and inode from server using secfs.store.blocks
-    secfs.tables.remove(i)
-    sub_is.append(i)
-    return sub_is
+        new_ihash = secfs.store.tree.remove(parent_i, name, table_key)
+        #if parent_i.p != remove_as:
+        #    p_i = Group.(ctx.gid)
+        secfs.tables.modmap(remove_as, parent_i, new_ihash)
+        #TODO(magendanz) remove filr and inode from server using secfs.store.blocks
+        secfs.tables.remove(i)
+        sub_is.append(i)
+        return sub_is
+    else:
+        unlink(parent_i, i, name, remove_as)
+        return i
 
 def readdir(i, off, read_as):
     """
