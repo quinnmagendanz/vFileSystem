@@ -369,7 +369,60 @@ def modmap(mod_as, i, ihash):
     t.save()
     return i
 
-def try_create_table(create_as, i):
+def modmapInode(mod_as, i, node):
+    """
+    Changes or allocates i so it points to ihash.
+
+    If i.allocated() is false (i.e. the I was created without an i-number), a
+    new i-number will be allocated for the principal i.p. This function is
+    complicated by the fact that i might be a group i, in which case we need
+    to:
+
+      1. Allocate an i as mod_as
+      2. Allocate/change the group i to point to the new i above
+
+    modmap returns the mapped i, with i.n filled in if the passed i was no
+    allocated.
+    """
+    ihash = None
+    if not isinstance(i, I):
+        raise TypeError("{} is not an I, is a {}".format(i, type(i)))
+    if not isinstance(mod_as, User):
+        raise TypeError("{} is not a User, is a {}".format(mod_as, type(mod_as)))
+
+    assert mod_as.is_user() # only real users can mod
+
+    if mod_as != i.p:
+        print("trying to mod object for {} through {}".format(i.p, mod_as))
+        assert i.p.is_group() and mod_as.is_user() # if not for self, then must be for group
+
+        real_i = resolve(i, False)
+        if isinstance(real_i, I) and real_i.p == mod_as:
+            # We updated the file most recently, so we can just update our i.
+            # No need to change the group i at all.
+            # This is an optimization.
+            i = real_i
+        elif isinstance(real_i, I) or real_i == None:
+            if isinstance(ihash, I):
+                # Caller has done the work for us, so we just need to link up
+                # the group entry.
+                print("mapping", i, "to", ihash, "which again points to", resolve(ihash))
+            else:
+                # Allocate a new entry for mod_as, and continue as though ihash
+                # was that new i.
+                # XXX: kind of unnecessary to send two VS for this
+                _node = node
+                ihash = modmapInode(mod_as, I(mod_as), node)
+                #print("mapping", i, "to", ihash, "which again points to", _ihash)
+        else:
+            # This is not a group i!
+            # User is trying to overwrite something they don't own!
+            raise PermissionError("illegal modmap; tried to mod i {0} as {1}".format(i, mod_as))
+
+    # find (or create) the principal's itable
+    global itables
+    vs = None
+    t = None
     if i.p not in itables:
         if i.allocated():
             # this was unexpected;
@@ -378,4 +431,28 @@ def try_create_table(create_as, i):
         t = Itable.create(i.p)
         itables[i.p] = t
         print("no current list for principal", i.p, "; creating empty table", t.mapping)
- 
+    else:
+        t = itables[i.p]
+
+    # look up (or allocate) the inumber for the i we want to modify
+    if not i.allocated():
+        inumber = 0
+        while inumber in t.mapping:
+            inumber += 1
+        i.allocate(inumber)
+    else:
+        if i.n not in t.mapping:
+            raise IndexError("invalid inumber")
+
+    # modify the entry, and store back the updated itable
+    if i.p.is_group():
+        print("mapping", i.n, "for group", i.p, "into", t.mapping)
+
+    if ihash is None:
+        table_key = get_itable_key(mod_as, i.p)
+        ihash = node.save(table_key)
+    t.mapping[i.n] = ihash # for groups, ihash is an i
+    t.save()
+    return i
+
+
