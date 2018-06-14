@@ -1,0 +1,5 @@
+Virtual File System for Untrusted Server
+
+This is a file system designed to run on an untrusted server. Basic file system commands have been implemented so that all created files will have their contents encrypted before stored onto the server. Directories and files are permission managed so as to even prevent root from breaking file priveleges.
+
+See Secure Untrusted Data Repository (SUNDR) (https://usenix.org/legacy/event/osdi04/tech/full_papers/li_j/li_j.pdf)
